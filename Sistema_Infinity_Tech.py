@@ -567,7 +567,18 @@ elif opcao == "👤 Clientes (CRM)":
         with st.container(border=True):
             st.markdown("<h3 style='margin-top:0;'>Ficha de Cadastro</h3>", unsafe_allow_html=True)
             
-            # Input de CEP com busca automatica fora do Form
+            st.markdown("##### Informações Pessoais")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                nome = st.text_input("Nome Completo:", key="cad_nome")
+                whatsapp = st.text_input("WhatsApp (com DDD):", placeholder="Ex: 11988887777", key="cad_whatsapp")
+            with col_p2:
+                cpf_input = st.text_input("CPF (somente numeros):", placeholder="Ex: 12345678909", max_chars=11, key="cad_cpf")
+                email = st.text_input("E-mail:", key="cad_email")
+            
+            st.markdown("##### Endereço Residencial")
+            
+            # Input de CEP com busca automatica colocado no inicio do endereco
             cep_key = f"inserir_cep_{st.session_state.cep_key_counter}"
             cep_val = st.text_input("CEP (somente numeros):", placeholder="Ex: 01103010", max_chars=8, key=cep_key, help="Digite os 8 numeros do CEP para buscar o endereco automaticamente")
             cep_clean = re.sub(r'\D', '', cep_val)
@@ -580,61 +591,55 @@ elif opcao == "👤 Clientes (CRM)":
                     st.toast("Endereço preenchido automaticamente!", icon="📍")
                 else:
                     st.error("CEP nao localizado.")
-
-            with st.form("form_cadastrar_cliente", clear_on_submit=True):
-                st.markdown("##### Informacoes Pessoais")
-                col_p1, col_p2 = st.columns(2)
-                with col_p1:
-                    nome = st.text_input("Nome Completo:")
-                    whatsapp = st.text_input("WhatsApp (com DDD):", placeholder="Ex: 11988887777")
-                with col_p2:
-                    cpf_input = st.text_input("CPF (somente numeros):", placeholder="Ex: 12345678909", max_chars=11)
-                    email = st.text_input("E-mail:")
+            
+            col_e1, col_e2, col_e3 = st.columns([3, 1, 2])
+            with col_e1:
+                logradouro = st.text_input("Logradouro (Rua/Avenida):", value=st.session_state.cep_data_inserido.get("logradouro", ""), key="cad_logradouro")
+            with col_e2:
+                numero = st.text_input("Numero:", key="cad_numero")
+            with col_e3:
+                complemento = st.text_input("Complemento:", key="cad_complemento")
                 
-                st.markdown("##### Endereco Residencial")
-                col_e1, col_e2, col_e3 = st.columns([3, 1, 2])
-                with col_e1:
-                    logradouro = st.text_input("Logradouro (Rua/Avenida):", value=st.session_state.cep_data_inserido.get("logradouro", ""))
-                with col_e2:
-                    numero = st.text_input("Numero:")
-                with col_e3:
-                    complemento = st.text_input("Complemento:")
-                    
-                col_e4, col_e5, col_e6 = st.columns([2, 2, 1])
-                with col_e4:
-                    bairro = st.text_input("Bairro:", value=st.session_state.cep_data_inserido.get("bairro", ""))
-                with col_e5:
-                    cidade = st.text_input("Cidade:", value=st.session_state.cep_data_inserido.get("localidade", ""))
-                with col_e6:
-                    estado = st.text_input("UF:", value=st.session_state.cep_data_inserido.get("uf", ""))
-                    
-                st.write("")
-                if st.form_submit_button("Salvar Cliente", type="primary", use_container_width=True):
-                    if nome and whatsapp:
-                        cpf_clean = re.sub(r'\D', '', cpf_input) if cpf_input else ""
-                        if cpf_clean and not validar_cpf(cpf_clean):
-                            st.error("Erro: O CPF digitado e invalido!")
-                        else:
-                            try:
-                                executar_query("""
-                                    INSERT INTO Clientes (Nome, WhatsApp, Email, Documento, CEP, Logradouro, Numero, Complemento, Bairro, Cidade, Estado)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                """, (nome, whatsapp, email if email else None, cpf_clean if cpf_clean else None, 
-                                      cep_clean if cep_clean else None, logradouro, numero, complemento, bairro, cidade, estado))
-                                
-                                # Limpa estados do CEP
-                                st.session_state.ultimo_cep_inserido = ""
-                                st.session_state.cep_data_inserido = {"logradouro": "", "bairro": "", "localidade": "", "uf": ""}
-                                st.session_state.cep_key_counter += 1
-                                st.success(f"Cliente '{nome}' cadastrado com sucesso!")
-                                st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon="🎉")
-                                st.rerun()
-                            except psycopg2.IntegrityError:
-                                st.error("Erro: WhatsApp ou CPF ja cadastrado no sistema.")
-                            except Exception as e:
-                                st.error(f"Erro ao salvar: {e}")
+            col_e4, col_e5, col_e6 = st.columns([2, 2, 1])
+            with col_e4:
+                bairro = st.text_input("Bairro:", value=st.session_state.cep_data_inserido.get("bairro", ""), key="cad_bairro")
+            with col_e5:
+                cidade = st.text_input("Cidade:", value=st.session_state.cep_data_inserido.get("localidade", ""), key="cad_cidade")
+            with col_e6:
+                estado = st.text_input("UF:", value=st.session_state.cep_data_inserido.get("uf", ""), key="cad_estado")
+                
+            st.write("")
+            if st.button("Salvar Cliente", type="primary", use_container_width=True):
+                if nome and whatsapp:
+                    cpf_clean = re.sub(r'\D', '', cpf_input) if cpf_input else ""
+                    if cpf_clean and not validar_cpf(cpf_clean):
+                        st.error("Erro: O CPF digitado é inválido!")
                     else:
-                        st.warning("Nome e WhatsApp sao obrigatorios.")
+                        try:
+                            executar_query("""
+                                INSERT INTO Clientes (Nome, WhatsApp, Email, Documento, CEP, Logradouro, Numero, Complemento, Bairro, Cidade, Estado)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (nome, whatsapp, email if email else None, cpf_clean if cpf_clean else None, 
+                                  cep_clean if cep_clean else None, logradouro, numero, complemento, bairro, cidade, estado))
+                            
+                            # Limpa os campos do formulário redefinindo as chaves no session_state
+                            st.session_state.ultimo_cep_inserido = ""
+                            st.session_state.cep_data_inserido = {"logradouro": "", "bairro": "", "localidade": "", "uf": ""}
+                            st.session_state.cep_key_counter += 1
+                            
+                            for k in ["cad_nome", "cad_whatsapp", "cad_cpf", "cad_email", "cad_logradouro", "cad_numero", "cad_complemento", "cad_bairro", "cad_cidade", "cad_estado"]:
+                                if k in st.session_state:
+                                    st.session_state[k] = ""
+                                    
+                            st.success(f"Cliente '{nome}' cadastrado com sucesso!")
+                            st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon="🎉")
+                            st.rerun()
+                        except psycopg2.IntegrityError:
+                            st.error("Erro: WhatsApp ou CPF já cadastrado no sistema.")
+                        except Exception as e:
+                            st.error(f"Erro ao salvar: {e}")
+                else:
+                    st.warning("Nome e WhatsApp são obrigatórios.")
                         
     with aba_lista:
         st.header("Lista de Clientes")
