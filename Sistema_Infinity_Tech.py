@@ -509,9 +509,25 @@ if opcao == "🏠 Painel Geral (Dashboard)":
             
             if chart_dados:
                 df_chart = pd.DataFrame(chart_dados, columns=["Data", "Receitas (R$)", "Despesas (R$)"])
+                # Converte as colunas de tipo Decimal para float (corrige escala e orientacao vertical do grafico)
+                df_chart["Receitas (R$)"] = df_chart["Receitas (R$)"].astype(float)
+                df_chart["Despesas (R$)"] = df_chart["Despesas (R$)"].astype(float)
                 df_chart["Data"] = df_chart["Data"].apply(lambda d: d.strftime('%d/%m'))
                 df_chart = df_chart.set_index("Data")
                 st.bar_chart(df_chart, use_container_width=True)
+                
+                # Exibe um resumo explicativo legivel abaixo do grafico
+                soma_rec = df_chart["Receitas (R$)"].sum()
+                soma_des = df_chart["Despesas (R$)"].sum()
+                saldo_total = soma_rec - soma_des
+                
+                col_c1, col_c2, col_c3 = st.columns(3)
+                with col_c1:
+                    st.markdown(f"**Total Receitas no Período:** <span style='color:#10B981;'>R$ {soma_rec:,.2f}</span>", unsafe_allow_html=True)
+                with col_c2:
+                    st.markdown(f"**Total Despesas no Período:** <span style='color:#EF4444;'>R$ {soma_des:,.2f}</span>", unsafe_allow_html=True)
+                with col_c3:
+                    st.markdown(f"**Saldo Líquido do Período:** <span style='color:#3B82F6; font-weight:bold;'>R$ {saldo_total:,.2f}</span>", unsafe_allow_html=True)
             else:
                 st.info("Nenhuma transação financeira registrada nos últimos 30 dias para exibir no gráfico.")
                 
