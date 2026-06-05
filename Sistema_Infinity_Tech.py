@@ -512,7 +512,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                     JOIN Clientes c ON f.IdCliente = c.IdCliente
                     JOIN ItensEstoque i ON f.IdItem = i.IdItem
                     JOIN Produtos p ON i.IdProduto = p.IdProduto
-                    WHERE i.Status IN ('Manutencao', 'Pronto')
+                    WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%'
                     ORDER BY f.IdLancamento DESC LIMIT 5
                 """, fetch='all')
                 if os_ativas:
@@ -547,7 +547,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                 JOIN Clientes c ON f.IdCliente = c.IdCliente
                 JOIN ItensEstoque i ON f.IdItem = i.IdItem
                 JOIN Produtos p ON i.IdProduto = p.IdProduto
-                WHERE i.Status IN ('Manutencao', 'Pronto')
+                WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%'
                 ORDER BY f.IdLancamento DESC LIMIT 5
             """, fetch='all')
             if os_ativas:
@@ -1299,7 +1299,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
             JOIN Clientes c ON f.IdCliente = c.IdCliente
             JOIN ItensEstoque i ON f.IdItem = i.IdItem
             JOIN Produtos p ON i.IdProduto = p.IdProduto
-            WHERE CAST(f.IdLancamento AS TEXT) ILIKE %s OR c.Nome ILIKE %s OR i.NumeroSerie ILIKE %s OR f.CodigoVenda ILIKE %s
+            WHERE (CAST(f.IdLancamento AS TEXT) ILIKE %s OR c.Nome ILIKE %s OR i.NumeroSerie ILIKE %s OR f.CodigoVenda ILIKE %s)
+              AND f.Descricao NOT LIKE '[CUSTO PEÇA]%'
             ORDER BY f.IdLancamento DESC
         """
         param_busca_os = f"%{termo_busca_os}%"
@@ -1458,7 +1459,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     try:
                                         conn = abrir_conexao()
                                         cursor = conn.cursor()
-                                        # Atualiza valor e descrição no FluxoCaixa
+                                        # Atualiza valor e descrição no FluxoCaixa (Receita da O.S.)
                                         cursor.execute("""
                                             UPDATE FluxoCaixa 
                                             SET Valor = %s, Descricao = %s 
@@ -1476,6 +1477,34 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                             SET NumeroSerie = %s 
                                             WHERE IdItem = %s
                                         """, (novo_sn_os, id_item_os))
+                                        
+                                        # Gerencia a Saída de Caixa para o custo da peça
+                                        cursor.execute("""
+                                            SELECT IdLancamento FROM FluxoCaixa 
+                                            WHERE IdItem = %s AND Tipo = 'S'
+                                        """, (id_item_os,))
+                                        row_despesa = cursor.fetchone()
+                                        
+                                        if novo_custo_os > 0:
+                                            desc_despesa_peca = f"[CUSTO PEÇA] - OS #{id_lanc_os} - {marca_p} {modelo_p}"
+                                            if row_despesa:
+                                                # Se já existe, atualiza o valor
+                                                cursor.execute("""
+                                                    UPDATE FluxoCaixa 
+                                                    SET Valor = %s, Descricao = %s 
+                                                    WHERE IdLancamento = %s
+                                                """, (novo_custo_os, desc_despesa_peca, row_despesa[0]))
+                                            else:
+                                                # Se não existe, cria novo lançamento de Saída (S)
+                                                cursor.execute("""
+                                                    INSERT INTO FluxoCaixa (IdItem, IdCliente, Tipo, Valor, Descricao)
+                                                    VALUES (%s, %s, 'S', %s, %s)
+                                                """, (id_item_os, id_cli_os, 'S', novo_custo_os, desc_despesa_peca))
+                                        else:
+                                            # Se o custo foi zerado, remove a despesa correspondente do caixa
+                                            if row_despesa:
+                                                cursor.execute("DELETE FROM FluxoCaixa WHERE IdLancamento = %s", (row_despesa[0],))
+                                                
                                         conn.commit()
                                         conn.close()
                                         st.success("O.S. atualizada com sucesso!")
@@ -1536,7 +1565,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             confirmar_excluir_os = st.checkbox(f"Confirmo que desejo apagar definitivamente a OS Nº {id_lanc_os}.", key=f"conf_del_os_{id_lanc_os}")
                             if st.button("Excluir Ordem de Serviço", type="primary", disabled=not confirmar_excluir_os, key=f"btn_del_os_{id_lanc_os}"):
                                 try:
-                                    executar_query("DELETE FROM FluxoCaixa WHERE IdLancamento = %s", (id_lanc_os,))
+                                    # Remove todos os registros de fluxo de caixa (receitas e despesas de peças) vinculados a esta OS
+                                    executar_query("DELETE FROM FluxoCaixa WHERE IdItem = %s", (id_item_os,))
                                     st.success("Ordem de Serviço apagada com sucesso!")
                                     st.rerun()
                                 except Exception as e:
