@@ -512,7 +512,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                     JOIN Clientes c ON f.IdCliente = c.IdCliente
                     JOIN ItensEstoque i ON f.IdItem = i.IdItem
                     JOIN Produtos p ON i.IdProduto = p.IdProduto
-                    WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%'
+                    WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%%'
                     ORDER BY f.IdLancamento DESC LIMIT 5
                 """, fetch='all')
                 if os_ativas:
@@ -547,7 +547,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                 JOIN Clientes c ON f.IdCliente = c.IdCliente
                 JOIN ItensEstoque i ON f.IdItem = i.IdItem
                 JOIN Produtos p ON i.IdProduto = p.IdProduto
-                WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%'
+                WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%%'
                 ORDER BY f.IdLancamento DESC LIMIT 5
             """, fetch='all')
             if os_ativas:
@@ -1300,7 +1300,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
             JOIN ItensEstoque i ON f.IdItem = i.IdItem
             JOIN Produtos p ON i.IdProduto = p.IdProduto
             WHERE (CAST(f.IdLancamento AS TEXT) ILIKE %s OR c.Nome ILIKE %s OR i.NumeroSerie ILIKE %s OR f.CodigoVenda ILIKE %s)
-              AND f.Descricao NOT LIKE '[CUSTO PEÇA]%'
+              AND f.Descricao NOT LIKE '[CUSTO PEÇA]%%'
             ORDER BY f.IdLancamento DESC
         """
         param_busca_os = f"%{termo_busca_os}%"
