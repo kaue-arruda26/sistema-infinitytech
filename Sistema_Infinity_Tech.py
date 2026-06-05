@@ -1397,7 +1397,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                     if codigo_venda:
                         key = codigo_venda
                     else:
-                        key = f"VND-OLD-{id_lanc}"
+                        data_minuto = data.strftime('%Y%m%d-%H%M')
+                        key = f"VND-OLD-{id_cli}-{data_minuto}"
                         
                     if key not in atendimentos_agrupados:
                         atendimentos_agrupados[key] = {
@@ -1778,11 +1779,12 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                             WHERE CodigoVenda = %s
                                         """, (nova_desc_venda, codigo_venda))
                                     else:
+                                        ids_lanc_agrupados = [it["id_lanc"] for it in itens_venda]
                                         executar_query("""
                                             UPDATE FluxoCaixa 
                                             SET Descricao = %s 
-                                            WHERE IdLancamento = %s
-                                        """, (nova_desc_venda, id_lanc_ref))
+                                            WHERE IdLancamento = ANY(%s)
+                                        """, (nova_desc_venda, ids_lanc_agrupados))
                                     st.success("Observações atualizadas com sucesso!")
                                     st.rerun()
                                 except Exception as e:
@@ -1811,7 +1813,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     if codigo_venda:
                                         cursor.execute("DELETE FROM FluxoCaixa WHERE CodigoVenda = %s", (codigo_venda,))
                                     else:
-                                        cursor.execute("DELETE FROM FluxoCaixa WHERE IdLancamento = %s", (id_lanc_ref,))
+                                        ids_lanc_agrupados = [it["id_lanc"] for it in itens_venda]
+                                        cursor.execute("DELETE FROM FluxoCaixa WHERE IdLancamento = ANY(%s)", (ids_lanc_agrupados,))
                                         
                                     conn.commit()
                                     conn.close()
