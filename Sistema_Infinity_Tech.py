@@ -1292,9 +1292,9 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
         st.header("Gerenciar Atendimentos & Ordens de Serviço")
         termo_busca_os = st.text_input("Pesquisar O.S. por ID (Número), Nome do Cliente ou Serial:")
         
-        # Query detalhada de O.S. e Vendas (incluindo WhatsApp do cliente)
+        # Query detalhada de O.S. e Vendas (incluindo WhatsApp do cliente, custo do produto e ID do produto)
         query_os = """
-            SELECT f.IdLancamento, c.Nome, p.Marca, p.Modelo, i.NumeroSerie, i.Status, f.Valor, f.Descricao, f.DataLancamento, i.IdItem, c.IdCliente, c.WhatsApp, f.CodigoVenda
+            SELECT f.IdLancamento, c.Nome, p.Marca, p.Modelo, i.NumeroSerie, i.Status, f.Valor, f.Descricao, f.DataLancamento, i.IdItem, c.IdCliente, c.WhatsApp, f.CodigoVenda, p.CustoProduto, p.IdProduto
             FROM FluxoCaixa f
             JOIN Clientes c ON f.IdCliente = c.IdCliente
             JOIN ItensEstoque i ON f.IdItem = i.IdItem
@@ -1309,7 +1309,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
             # Agrupar atendimentos por CodigoVenda para vendas agrupadas, mantendo O.S. e vendas avulsas separadas
             atendimentos_agrupados = {}
             for a in atendimentos:
-                id_lanc, nome_cli, marca, modelo, sn, status, valor, desc, data, id_item, id_cli, whats, codigo_venda = a
+                id_lanc, nome_cli, marca, modelo, sn, status, valor, desc, data, id_item, id_cli, whats, codigo_venda, custo_prod, id_prod_os = a
                 data = converter_para_sp(data)
                 is_assistencia = desc.startswith("[ASSISTENCIA]")
                 
@@ -1327,6 +1327,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                         "data": data,
                         "id_cli": id_cli,
                         "whats": whats,
+                        "custo_produto": float(custo_prod) if custo_prod else 0.0,
+                        "id_prod_os": id_prod_os,
                         "itens": [{
                             "id_lanc": id_lanc,
                             "id_item": id_item,
@@ -1357,6 +1359,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             "data": data,
                             "id_cli": id_cli,
                             "whats": whats,
+                            "custo_produto": 0.0,
+                            "id_prod_os": None,
                             "itens": [],
                             "codigo_venda": codigo_venda
                         }
@@ -1435,6 +1439,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                     id_item_os = item_os["id_item"]
                     id_cli_os = atend_sel["id_cli"]
                     whats_cli = atend_sel["whats"]
+                    custo_os = atend_sel["custo_produto"]
+                    id_prod_os = atend_sel["id_prod_os"]
                     
                     col_os_e, col_os_d = st.columns([2, 1])
                     
@@ -1442,6 +1448,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                         st.markdown(f"#### ✏️ Modificar Detalhes da OS Nº {id_lanc_os}")
                         with st.form(f"form_editar_os_{id_lanc_os}"):
                             novo_valor_os = st.number_input("Valor Final Cobrado (R$):", value=float(valor_os), min_value=0.0)
+                            novo_custo_os = st.number_input("Custo da(s) Peça(s) Comprada(s) (R$):", value=float(custo_os), min_value=0.0)
                             novo_sn_os = st.text_input("Número de Série/REF:", value=sn_os)
                             novo_desc_os = st.text_area("Histórico / Diagnóstico Técnico / Detalhes:", value=desc_os)
                             
@@ -1457,6 +1464,12 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                             SET Valor = %s, Descricao = %s 
                                             WHERE IdLancamento = %s
                                         """, (novo_valor_os, novo_desc_os, id_lanc_os))
+                                        # Atualiza custo do produto em Produtos
+                                        cursor.execute("""
+                                            UPDATE Produtos 
+                                            SET CustoProduto = %s 
+                                            WHERE IdProduto = %s
+                                        """, (novo_custo_os, id_prod_os))
                                         # Atualiza número de série do equipamento no ItensEstoque
                                         cursor.execute("""
                                             UPDATE ItensEstoque 
