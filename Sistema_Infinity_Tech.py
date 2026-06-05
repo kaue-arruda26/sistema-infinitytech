@@ -1497,7 +1497,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             if not whats_limpo.startswith("55"):
                                 whats_limpo = "55" + whats_limpo
                                 
-                            msg_manutencao = f"Olá, {nome_cli}! O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} já está em manutenção na nossa assistência técnica. Acompanhe o andamento pelo sistema!"
+                            msg_manutencao = f"Olá, {nome_cli}! O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} já está em manutenção na nossa assistência técnica. Assim que estiver pronto, entraremos em contato!"
                             msg_pronto = f"Olá, {nome_cli}! Temos boas notícias: o seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} está PRONTO! Você já pode vir retirá-lo na nossa loja. Valor final: R$ {valor_os:.2f}."
                             msg_entregue = f"Olá, {nome_cli}! O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} foi entregue com sucesso e a O.S. foi finalizada. Agradecemos a preferência pela Infinity Tech!"
                             
