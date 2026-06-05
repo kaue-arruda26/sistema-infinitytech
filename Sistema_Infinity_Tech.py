@@ -891,11 +891,12 @@ elif opcao == "📦 Produtos & Estoque":
         query_produtos = """
             SELECT p.IdProduto, p.Marca, p.Modelo, p.CustoProduto, p.ValorMinimo, p.ValorVenda,
                    COUNT(CASE WHEN LOWER(i.Status) = 'disponivel' THEN 1 END) as disponivel,
-                   COUNT(i.IdItem) as total
+                   COUNT(CASE WHEN LOWER(i.Status) NOT IN ('manutencao', 'pronto', 'entregue') THEN 1 END) as total
             FROM Produtos p
             LEFT JOIN ItensEstoque i ON p.IdProduto = i.IdProduto
             WHERE p.Ativo = true AND (p.Marca ILIKE %s OR p.Modelo ILIKE %s)
             GROUP BY p.IdProduto, p.Marca, p.Modelo, p.CustoProduto, p.ValorMinimo, p.ValorVenda
+            HAVING (COUNT(i.IdItem) = 0 OR COUNT(CASE WHEN LOWER(i.Status) NOT IN ('manutencao', 'pronto', 'entregue') THEN 1 END) > 0)
             ORDER BY p.Marca, p.Modelo
         """
         param_busca = f"%{termo_busca}%"
@@ -997,7 +998,7 @@ elif opcao == "📦 Produtos & Estoque":
                         itens_fisicos = executar_query("""
                             SELECT IdItem, NumeroSerie, Status 
                             FROM ItensEstoque 
-                            WHERE IdProduto = %s 
+                            WHERE IdProduto = %s AND LOWER(Status) NOT IN ('manutencao', 'pronto', 'entregue')
                             ORDER BY IdItem ASC
                         """, (id_p,), fetch='all')
                         
@@ -1073,7 +1074,7 @@ elif opcao == "📦 Produtos & Estoque":
                         itens_fisicos = executar_query("""
                             SELECT IdItem, NumeroSerie, Status 
                             FROM ItensEstoque 
-                            WHERE IdProduto = %s 
+                            WHERE IdProduto = %s AND LOWER(Status) NOT IN ('manutencao', 'pronto', 'entregue')
                             ORDER BY IdItem ASC
                         """, (id_p,), fetch='all')
                         
