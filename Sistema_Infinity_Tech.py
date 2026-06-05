@@ -1536,6 +1536,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     Assistencia Tecnica e Vendas<br>
                                     Rua Santa Efigenia, 264 Box 9-A<br>
                                     Sao Paulo - SP<br>
+                                    Whats: (11) 97086-8573<br>
                                     ----------------------------
                                 </div>
                                 <strong>COMPROVANTE O.S. NO {id_lanc_os}</strong><br>
@@ -1678,6 +1679,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     Assistencia Tecnica e Vendas<br>
                                     Rua Santa Efigenia, 264 Box 9-A<br>
                                     Sao Paulo - SP<br>
+                                    Whats: (11) 97086-8573<br>
                                     ----------------------------
                                 </div>
                                 <strong>COMPROVANTE DE VENDA</strong><br>
@@ -1816,7 +1818,7 @@ elif opcao == "📊 Financeiro & Caixa":
                 
                 with st.form(f"form_editar_fin_{id_lanc_f}"):
                     novo_tipo_f = st.selectbox("Tipo:", ["Entrada (Receita)", "Saída (Despesa)"], index=0 if tipo_lanc_f == 'E' else 1)
-                    novo_valor_f = st.number_input("Valor (R$):", value=float(valor_lanc_f), min_value=0.01)
+                    novo_valor_f = st.number_input("Valor (R$):", value=float(valor_lanc_f), min_value=0.0)
                     nova_desc_f = st.text_area("Descrição:", value=desc_lanc_f)
                     
                     if st.form_submit_button("Salvar Alterações Financeiras", type="primary"):
