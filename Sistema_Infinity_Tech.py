@@ -3,8 +3,21 @@ import psycopg2
 import psycopg2.extras
 import pandas as pd
 import streamlit.components.v1 as components
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import requests
+
+def converter_para_sp(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt_sp = dt.astimezone(timezone(timedelta(hours=-3)))
+    else:
+        dt_sp = dt.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=-3)))
+    return dt_sp.replace(tzinfo=None)
+
+def obter_agora_sp():
+    return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3))).replace(tzinfo=None)
+
 import re
 
 # Configurações iniciais da página do Streamlit
@@ -1185,7 +1198,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     cursor = conn.cursor()
                                     
                                     # Gera o CodigoVenda único para esta venda agrupada
-                                    codigo_venda = f"VND-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{id_cli_os}"
+                                    codigo_venda = f"VND-{obter_agora_sp().strftime('%Y%m%d-%H%M%S')}-{id_cli_os}"
                                     
                                     # Processa cada item do carrinho
                                     for item in st.session_state.carrinho_venda:
@@ -1297,6 +1310,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
             atendimentos_agrupados = {}
             for a in atendimentos:
                 id_lanc, nome_cli, marca, modelo, sn, status, valor, desc, data, id_item, id_cli, whats, codigo_venda = a
+                data = converter_para_sp(data)
                 is_assistencia = desc.startswith("[ASSISTENCIA]")
                 
                 if is_assistencia:
@@ -1750,9 +1764,10 @@ elif opcao == "📊 Financeiro & Caixa":
         # Filtros de data e tipo
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
-            data_inicio = st.date_input("De:", value=datetime(datetime.now().year, datetime.now().month, 1))
+            agora_sp = obter_agora_sp()
+            data_inicio = st.date_input("De:", value=datetime(agora_sp.year, agora_sp.month, 1))
         with col_f2:
-            data_fim = st.date_input("Até:", value=datetime.now())
+            data_fim = st.date_input("Até:", value=obter_agora_sp())
         with col_f3:
             tipo_filtro = st.selectbox("Filtrar por Tipo:", ["Todos", "Entradas (Receitas)", "Saídas (Despesas)"])
             
@@ -1781,6 +1796,7 @@ elif opcao == "📊 Financeiro & Caixa":
             
             for item in caixa_dados:
                 id_l, tipo_l, valor_l, desc_l, date_l, nome_c = item
+                date_l = converter_para_sp(date_l)
                 nome_c_final = nome_c if nome_c else "Lançamento Avulso"
                 tipo_str = "🟢 Entrada" if tipo_l == 'E' else "🔴 Saída"
                 
