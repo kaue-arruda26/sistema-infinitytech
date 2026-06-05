@@ -493,6 +493,30 @@ if opcao == "🏠 Painel Geral (Dashboard)":
 
             st.write("---")
             
+            # 📈 Desempenho Financeiro Recente (Gráfico)
+            st.subheader("📈 Desempenho Financeiro (Últimos 30 Dias)")
+            
+            chart_dados = executar_query("""
+                SELECT 
+                    CAST(DataLancamento AS DATE) as data_dia,
+                    SUM(CASE WHEN Tipo = 'E' THEN Valor ELSE 0 END) as receitas,
+                    SUM(CASE WHEN Tipo = 'S' THEN Valor ELSE 0 END) as despesas
+                FROM FluxoCaixa
+                WHERE DataLancamento >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY CAST(DataLancamento AS DATE)
+                ORDER BY data_dia ASC
+            """, fetch='all')
+            
+            if chart_dados:
+                df_chart = pd.DataFrame(chart_dados, columns=["Data", "Receitas (R$)", "Despesas (R$)"])
+                df_chart["Data"] = df_chart["Data"].apply(lambda d: d.strftime('%d/%m'))
+                df_chart = df_chart.set_index("Data")
+                st.bar_chart(df_chart, use_container_width=True)
+            else:
+                st.info("Nenhuma transação financeira registrada nos últimos 30 dias para exibir no gráfico.")
+                
+            st.write("---")
+            
             # Grid inferior com Alertas de Estoque Baixo e O.S. Pendentes
             col_g1, col_g2 = st.columns(2)
             
@@ -1182,7 +1206,14 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 st.rerun()
                                 
                         st.write("---")
-                        observacoes_venda = st.text_area("Observações da Venda / Forma de Pagamento:", placeholder="Ex: Venda realizada no cartão de crédito em 3x.")
+                        col_pay1, col_pay2 = st.columns(2)
+                        with col_pay1:
+                            forma_pagamento_venda = st.selectbox(
+                                "Forma de Pagamento Principal:",
+                                ["Dinheiro", "Pix", "Cartão de Crédito", "Cartão de Débito", "Outro"]
+                            )
+                        with col_pay2:
+                            observacoes_venda = st.text_input("Observações Adicionais / Detalhes:", placeholder="Ex: Venda parcelada em 3x.")
                         
                         col_actions1, col_actions2 = st.columns(2)
                         with col_actions1:
@@ -1230,7 +1261,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                             cursor.execute("""
                                                 INSERT INTO FluxoCaixa (IdItem, IdCliente, Tipo, Valor, Descricao, CodigoVenda)
                                                 VALUES (%s, %s, 'E', %s, %s, %s)
-                                            """, (id_item_venda, id_cli_os, preco_u, f"[VENDA MULTIPLA] - {observacoes_venda}", codigo_venda))
+                                            """, (id_item_venda, id_cli_os, preco_u, f"[VENDA MULTIPLA][PAGAMENTO: {forma_pagamento_venda.upper()}] - {observacoes_venda}", codigo_venda))
                                             
                                     conn.commit()
                                     conn.close()
@@ -1448,10 +1479,26 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                     with col_os_e:
                         st.markdown(f"#### ✏️ Modificar Detalhes da OS Nº {id_lanc_os}")
                         with st.form(f"form_editar_os_{id_lanc_os}"):
+                            # Detecta forma de pagamento atual no texto da descrição
+                            forma_pag_atual = "Não Informado"
+                            for f in ["Dinheiro", "Pix", "Cartão de Crédito", "Cartão de Débito", "Outro"]:
+                                if f"[PAGAMENTO: {f.upper()}]" in desc_os:
+                                    forma_pag_atual = f
+                                    break
+                            
                             novo_valor_os = st.number_input("Valor Final Cobrado (R$):", value=float(valor_os), min_value=0.0)
                             novo_custo_os = st.number_input("Custo da(s) Peça(s) Comprada(s) (R$):", value=float(custo_os), min_value=0.0)
+                            
+                            forma_pagamento_os = st.selectbox(
+                                "Forma de Pagamento:",
+                                ["Não Informado", "Dinheiro", "Pix", "Cartão de Crédito", "Cartão de Débito", "Outro"],
+                                index=["Não Informado", "Dinheiro", "Pix", "Cartão de Crédito", "Cartão de Débito", "Outro"].index(forma_pag_atual)
+                            )
+                            
                             novo_sn_os = st.text_input("Número de Série/REF:", value=sn_os)
-                            novo_desc_os = st.text_area("Histórico / Diagnóstico Técnico / Detalhes:", value=desc_os)
+                            # Remove o prefixo de pagamento ao editar a descrição do defeito e separa as notas técnicas
+                            desc_defeito_only = re.sub(r'\[PAGAMENTO:\s*[^\]]+\]\s*-?\s*', '', desc_os.split("--- NOTAS TÉCNICAS ---")[0].strip())
+                            novo_desc_os = st.text_area("Histórico / Diagnóstico Técnico / Detalhes:", value=desc_defeito_only)
                             
                             col_os_btn = st.columns(2)
                             with col_os_btn[0]:
@@ -1459,12 +1506,26 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     try:
                                         conn = abrir_conexao()
                                         cursor = conn.cursor()
+                                        # Remove tags de pagamento anteriores da descrição para evitar duplicação
+                                        desc_limpa = re.sub(r'\[PAGAMENTO:\s*[^\]]+\]\s*-?\s*', '', novo_desc_os)
+                                        # Pega as notas técnicas existentes da descrição original
+                                        partes_originais = desc_os.split("--- NOTAS TÉCNICAS ---")
+                                        notas_existentes = partes_originais[1].strip() if len(partes_originais) > 1 else ""
+                                        
+                                        if forma_pagamento_os != "Não Informado":
+                                            desc_salvar = f"[PAGAMENTO: {forma_pagamento_os.upper()}] - {desc_limpa}"
+                                        else:
+                                            desc_salvar = desc_limpa
+                                            
+                                        if notas_existentes:
+                                            desc_salvar = desc_salvar + "\n\n--- NOTAS TÉCNICAS ---\n" + notas_existentes
+
                                         # Atualiza valor e descrição no FluxoCaixa (Receita da O.S.)
                                         cursor.execute("""
                                             UPDATE FluxoCaixa 
                                             SET Valor = %s, Descricao = %s 
                                             WHERE IdLancamento = %s
-                                        """, (novo_valor_os, novo_desc_os, id_lanc_os))
+                                        """, (novo_valor_os, desc_salvar, id_lanc_os))
                                         # Atualiza custo do produto em Produtos
                                         cursor.execute("""
                                             UPDATE Produtos 
@@ -1498,7 +1559,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                                 # Se não existe, cria novo lançamento de Saída (S)
                                                 cursor.execute("""
                                                     INSERT INTO FluxoCaixa (IdItem, IdCliente, Tipo, Valor, Descricao)
-                                                    VALUES (%s, %s, 'S', %s, %s)
+                                                    VALUES (%s, %s, %s, %s, %s)
                                                 """, (id_item_os, id_cli_os, 'S', novo_custo_os, desc_despesa_peca))
                                         else:
                                             # Se o custo foi zerado, remove a despesa correspondente do caixa
@@ -1511,6 +1572,37 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar alterações: {e}")
+                                        
+                        # Notas Técnicas e Acompanhamento
+                        st.write("---")
+                        st.markdown("#### 📜 Notas Técnicas e Acompanhamento")
+                        partes_desc = desc_os.split("--- NOTAS TÉCNICAS ---")
+                        defeito_atual = partes_desc[0].strip()
+                        notas_atuais_raw = partes_desc[1].strip() if len(partes_desc) > 1 else ""
+                        
+                        if notas_atuais_raw:
+                            linhas_notas = [l.strip() for l in notas_atuais_raw.split("\n") if l.strip()]
+                            for l_nota in linhas_notas:
+                                st.info(l_nota)
+                        else:
+                            st.caption("Nenhuma nota técnica de progresso registrada.")
+                            
+                        with st.form(f"form_add_nota_{id_lanc_os}", clear_on_submit=True):
+                            nova_nota = st.text_input("Nova Anotação de Progresso:")
+                            if st.form_submit_button("➕ Adicionar Nota"):
+                                if nova_nota.strip():
+                                    agora_str = obter_agora_sp().strftime('%d/%m/%Y %H:%M')
+                                    linha_nova = f"[{agora_str}] {nova_nota.strip()}"
+                                    
+                                    if notas_atuais_raw:
+                                        notas_atualizadas = notas_atuais_raw + "\n" + linha_nova
+                                    else:
+                                        notas_atualizadas = linha_nova
+                                        
+                                    desc_final = defeito_atual + "\n\n--- NOTAS TÉCNICAS ---\n" + notas_atualizadas
+                                    executar_query("UPDATE FluxoCaixa SET Descricao = %s WHERE IdLancamento = %s", (desc_final, id_lanc_os))
+                                    st.success("Nota adicionada com sucesso!")
+                                    st.rerun()
                                         
                         st.write("---")
                         st.markdown("#### ⚙️ Controle de Status da Assistência")
@@ -1605,10 +1697,14 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 <strong>PROD/APARELHO:</strong> {marca_p} {modelo_p}<br>
                                 <strong>S/N ou REF:</strong> {sn_os}<br>
                                 <strong>STATUS:</strong> {status_os.upper()}<br>
-                                <strong>DETALHES:</strong> {desc_os}<br>
+                                <strong>DETALHES:</strong> {re.sub(r'\[PAGAMENTO:\s*[^\]]+\]\s*-?\s*', '', desc_os.split('--- NOTAS TÉCNICAS ---')[0].strip())}<br>
                                 <div class="linha"></div>
                                 <strong>VALOR BRUTO: R$ {valor_os:.2f}</strong><br>
                                 <div class="linha"></div>
+                                <div style='font-size: 9px; text-align: justify; margin-top: 5px; line-height: 1.1;'>
+                                    <strong>TERMOS DE GARANTIA:</strong><br>
+                                    Garantia de 90 dias sobre a mao de obra e pecas trocadas a partir da data de retirada/entrega, cobrindo apenas defeitos associados ao servico realizado.
+                                </div>
                                 <div class="espaco-assinatura">___________________________<br>Assinatura do Cliente</div>
                                 <div class="espaco-assinatura">___________________________<br>Assinatura InfinityTech</div>
                             </div>
@@ -1761,6 +1857,10 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 <div class="linha"></div>
                                 <div style='font-size: 10px; margin-top: 5px;'>
                                     <strong>Obs:</strong> {desc_venda}
+                                </div>
+                                <div style='font-size: 9px; text-align: justify; margin-top: 5px; line-height: 1.1;'>
+                                    <strong>TERMOS DE GARANTIA:</strong><br>
+                                    Garantia de 90 dias contra defeitos de fabricacao a partir desta data, mediante apresentacao deste comprovante.
                                 </div>
                                 <div class="espaco-assinatura">___________________________<br>Assinatura do Cliente</div>
                                 <div class="espaco-assinatura">___________________________<br>Assinatura InfinityTech</div>
