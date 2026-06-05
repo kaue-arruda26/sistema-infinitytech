@@ -444,12 +444,17 @@ if opcao == "🏠 Painel Geral (Dashboard)":
             SELECT COUNT(*) FROM ItensEstoque WHERE Status IN ('Manutencao', 'Pronto')
         """, fetch='one')[0]
 
-        # Busca quantidade de produtos com estoque baixo (menor ou igual a 1 unidade disponível)
+        # Busca quantidade de produtos com estoque baixo (menor ou igual a 1 unidade disponível), desconsiderando aparelhos de O.S.
         baixo_estoque = executar_query("""
             SELECT p.Marca, p.Modelo, COUNT(i.IdItem) AS Qtd
             FROM Produtos p
             LEFT JOIN ItensEstoque i ON p.IdProduto = i.IdProduto AND LOWER(i.Status) = 'disponivel'
             WHERE p.Ativo = true
+              AND p.IdProduto NOT IN (
+                  SELECT DISTINCT IdProduto 
+                  FROM ItensEstoque 
+                  WHERE Status IN ('Manutencao', 'Pronto', 'Entregue')
+              )
             GROUP BY p.IdProduto, p.Marca, p.Modelo
             HAVING COUNT(i.IdItem) <= 1
         """, fetch='all')
