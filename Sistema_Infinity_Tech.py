@@ -243,6 +243,8 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = ""
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
+if "ocultar_valores" not in st.session_state:
+    st.session_state.ocultar_valores = False
 
 def realizar_login(usuario, senha):
     try:
@@ -448,6 +450,13 @@ with st.sidebar:
     
     st.write("---")
     st.caption(f"Usuário: {st.session_state.user_name}")
+    
+    # Botão para ocultar/mostrar valores financeiros
+    label_olho = "👁️ Mostrar Valores" if st.session_state.ocultar_valores else "🙈 Ocultar Valores"
+    if st.button(label_olho, use_container_width=True, key="btn_toggle_olho"):
+        st.session_state.ocultar_valores = not st.session_state.ocultar_valores
+        st.rerun()
+        
     if st.button("Sair", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.user_role = ""
@@ -503,10 +512,11 @@ if opcao == "🏠 Painel Geral (Dashboard)":
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
+                saldo_display = f"R$ {saldo:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-title">Saldo Líquido</div>
-                    <div class="metric-value val-success">R$ {saldo:,.2f}</div>
+                    <div class="metric-value val-success">{saldo_display}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -557,20 +567,28 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                 df_chart["Despesas (R$)"] = df_chart["Despesas (R$)"].astype(float)
                 df_chart["Data"] = df_chart["Data"].apply(lambda d: d.strftime('%d/%m'))
                 df_chart = df_chart.set_index("Data")
-                st.bar_chart(df_chart, use_container_width=True)
+                
+                if not st.session_state.ocultar_valores:
+                    st.bar_chart(df_chart, use_container_width=True)
+                else:
+                    st.info("📊 Gráfico de desempenho financeiro ocultado.")
                 
                 # Exibe um resumo explicativo legivel abaixo do grafico
                 soma_rec = df_chart["Receitas (R$)"].sum()
                 soma_des = df_chart["Despesas (R$)"].sum()
                 saldo_total = soma_rec - soma_des
                 
+                soma_rec_display = f"R$ {soma_rec:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                soma_des_display = f"R$ {soma_des:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                saldo_total_display = f"R$ {saldo_total:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                
                 col_c1, col_c2, col_c3 = st.columns(3)
                 with col_c1:
-                    st.markdown(f"**Total Receitas no Período:** <span style='color:#10B981;'>R$ {soma_rec:,.2f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**Total Receitas no Período:** <span style='color:#10B981;'>{soma_rec_display}</span>", unsafe_allow_html=True)
                 with col_c2:
-                    st.markdown(f"**Total Despesas no Período:** <span style='color:#EF4444;'>R$ {soma_des:,.2f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**Total Despesas no Período:** <span style='color:#EF4444;'>{soma_des_display}</span>", unsafe_allow_html=True)
                 with col_c3:
-                    st.markdown(f"**Saldo Líquido do Período:** <span style='color:#3B82F6; font-weight:bold;'>R$ {saldo_total:,.2f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**Saldo Líquido do Período:** <span style='color:#3B82F6; font-weight:bold;'>{saldo_total_display}</span>", unsafe_allow_html=True)
             else:
                 st.info("Nenhuma transação financeira registrada nos últimos 30 dias para exibir no gráfico.")
                 
@@ -600,6 +618,8 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                 """, fetch='all')
                 if os_ativas:
                     df_os = pd.DataFrame(os_ativas, columns=["Nº OS", "Cliente", "Marca", "Modelo", "Status", "Preço (R$)"])
+                    if st.session_state.ocultar_valores:
+                        df_os["Preço (R$)"] = "••••"
                     st.dataframe(df_os, use_container_width=True, hide_index=True)
                 else:
                     st.info("Nenhuma Ordem de Serviço em aberto no momento.")
@@ -2057,6 +2077,8 @@ elif opcao == "📊 Financeiro & Caixa":
                 st.info("Nenhum lançamento corresponde à forma de pagamento selecionada.")
             else:
                 df_fin = pd.DataFrame(tabela_final, columns=["ID Lançamento", "Tipo", "Valor (R$)", "Descrição", "Cliente/Origem", "Data"])
+                if st.session_state.ocultar_valores:
+                    df_fin["Valor (R$)"] = "••••"
                 st.dataframe(df_fin, use_container_width=True, hide_index=True)
                 
                 # Botão de exportação do caixa filtrado
@@ -2071,27 +2093,36 @@ elif opcao == "📊 Financeiro & Caixa":
                 
                 # Resumo financeiro do período
                 st.write("---")
+                total_e_display = f"R$ {total_e:.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                total_s_display = f"R$ {total_s:.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                saldo_p_display = f"R$ {total_e - total_s:.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                
                 col_res1, col_res2, col_res3 = st.columns(3)
                 with col_res1:
-                    st.info(f"🟢 **Total de Entradas:** R$ {total_e:.2f}")
+                    st.info(f"🟢 **Total de Entradas:** {total_e_display}")
                 with col_res2:
-                    st.warning(f"🔴 **Total de Saídas:** R$ {total_s:.2f}")
+                    st.warning(f"🔴 **Total de Saídas:** {total_s_display}")
                 with col_res3:
-                    saldo_p = total_e - total_s
-                    st.success(f"⚖️ **Saldo do Período:** R$ {saldo_p:.2f}")
+                    st.success(f"⚖️ **Saldo do Período:** {saldo_p_display}")
                     
                 # Exibir gráfico de barras das formas de pagamento no faturamento
                 if sum(dados_metodos.values()) > 0:
                     st.write("---")
                     st.subheader("📈 Faturamento por Forma de Pagamento (No Período)")
-                    df_chart_metodos = pd.DataFrame(list(dados_metodos.items()), columns=["Forma de Pagamento", "Valor (R$)"]).set_index("Forma de Pagamento")
-                    st.bar_chart(df_chart_metodos, use_container_width=True)
+                    if not st.session_state.ocultar_valores:
+                        df_chart_metodos = pd.DataFrame(list(dados_metodos.items()), columns=["Forma de Pagamento", "Valor (R$)"]).set_index("Forma de Pagamento")
+                        st.bar_chart(df_chart_metodos, use_container_width=True)
+                    else:
+                        st.info("📈 Gráfico de faturamento ocultado.")
                 
             # CRUD: Editar/Excluir lançamento do caixa
             st.write("---")
             st.subheader("Editar / Excluir Lançamento Financeiro")
             
-            dic_selecao_fin = {f"Lançamento Nº {c[0]} - {c[1]} - R$ {c[2]:.2f}": c for c in caixa_dados}
+            dic_selecao_fin = {}
+            for c in caixa_dados:
+                valor_display_fin = f"R$ {c[2]:.2f}" if not st.session_state.ocultar_valores else "••••"
+                dic_selecao_fin[f"Lançamento Nº {c[0]} - {c[1]} - {valor_display_fin}"] = c
             lanc_selecionado_str = st.selectbox("Selecione o Lançamento para Modificar:", list(dic_selecao_fin.keys()))
             
             if lanc_selecionado_str:
@@ -2152,25 +2183,29 @@ elif opcao == "📊 Financeiro & Caixa":
             """, (primeiro_dia_mes,), fetch='one')[0]
 
             col_d1, col_d2, col_d3 = st.columns(3)
+            sum_pendente_display = f"R$ {sum_pendente:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+            sum_vencido_display = f"R$ {sum_vencido:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+            sum_pago_mes_display = f"R$ {sum_pago_mes:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+            
             with col_d1:
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-title">Total Pendente</div>
-                    <div class="metric-value val-danger">R$ {sum_pendente:,.2f}</div>
+                    <div class="metric-value val-danger">{sum_pendente_display}</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_d2:
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-title">Dívidas Vencidas</div>
-                    <div class="metric-value val-warning">R$ {sum_vencido:,.2f}</div>
+                    <div class="metric-value val-warning">{sum_vencido_display}</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_d3:
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-title">Pago neste Mês</div>
-                    <div class="metric-value val-success">R$ {sum_pago_mes:,.2f}</div>
+                    <div class="metric-value val-success">{sum_pago_mes_display}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -2288,6 +2323,8 @@ elif opcao == "📊 Financeiro & Caixa":
                     df_div = pd.DataFrame(tabela_dividas, columns=[
                         "ID", "Credor", "Descrição", "Valor (R$)", "Status", "Data Início", "Vencimento", "Data Pagamento", "Vínculo O.S."
                     ])
+                    if st.session_state.ocultar_valores:
+                        df_div["Valor (R$)"] = "••••"
                     st.dataframe(df_div, use_container_width=True, hide_index=True)
                     
                     st.write("---")
@@ -2297,7 +2334,8 @@ elif opcao == "📊 Financeiro & Caixa":
                     for item in dados_dividas:
                         id_d, credor_d, desc_d, valor_d, _, _, stat_d, _, _, _ = item
                         status_ind = "Pendente" if stat_d == 'Pendente' else "Paga"
-                        lista_select_dividas[f"ID {id_d} - {credor_d} - R$ {valor_d:.2f} ({status_ind})"] = item
+                        valor_display_sel = f"R$ {valor_d:.2f}" if not st.session_state.ocultar_valores else "••••"
+                        lista_select_dividas[f"ID {id_d} - {credor_d} - {valor_display_sel} ({status_ind})"] = item
                         
                     divida_selecionada_str = st.selectbox("Selecione a Dívida para atualizar:", list(lista_select_dividas.keys()))
                     
@@ -2309,7 +2347,8 @@ elif opcao == "📊 Financeiro & Caixa":
                         with col_ad1:
                             st.markdown(f"**Credor:** {credor_d}")
                             st.markdown(f"**Item/Descrição:** {desc_d}")
-                            st.markdown(f"**Valor:** R$ {valor_d:.2f}")
+                            valor_display_det = f"R$ {valor_d:.2f}" if not st.session_state.ocultar_valores else "••••"
+                            st.markdown(f"**Valor:** {valor_display_det}")
                             st.markdown(f"**Status Atual:** {stat_d}")
                             if obs_d:
                                 st.markdown(f"**Anotações:** {obs_d}")
