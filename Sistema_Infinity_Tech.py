@@ -63,6 +63,44 @@ def executar_query(query, params=None, fetch=None):
         conn.close()
     return resultado
 
+def adicionar_nota_os(id_lanc, nota):
+    try:
+        desc_atual_db = executar_query("SELECT Descricao FROM FluxoCaixa WHERE IdLancamento = %s", (id_lanc,), fetch='one')
+        if desc_atual_db:
+            desc_os = desc_atual_db[0] if desc_atual_db[0] else ""
+            partes_desc = desc_os.split("--- NOTAS TÉCNICAS ---")
+            defeito_atual = partes_desc[0].strip()
+            notas_atuais_raw = partes_desc[1].strip() if len(partes_desc) > 1 else ""
+            
+            agora_str = obter_agora_sp().strftime('%d/%m/%Y %H:%M')
+            linha_nova = f"[{agora_str}] {nota.strip()}"
+            
+            if notas_atuais_raw:
+                notas_atualizadas = notas_atuais_raw + "\n" + linha_nova
+            else:
+                notas_atualizadas = linha_nova
+                
+            desc_final = defeito_atual + "\n\n--- NOTAS TÉCNICAS ---\n" + notas_atualizadas
+            executar_query("UPDATE FluxoCaixa SET Descricao = %s WHERE IdLancamento = %s", (desc_final, id_lanc))
+    except Exception:
+        pass
+
+def extrair_metodo_pagamento(desc):
+    if not desc:
+        return "Outro/Avulso"
+    desc_upper = desc.upper()
+    if "PAGAMENTO: PIX" in desc_upper or "PIX" in desc_upper:
+        return "Pix"
+    if "PAGAMENTO: DINHEIRO" in desc_upper or "DINHEIRO" in desc_upper or "ESPECIE" in desc_upper:
+        return "Dinheiro"
+    if "PAGAMENTO: CARTÃO DE CRÉDITO" in desc_upper or "CREDITO" in desc_upper or "CRÉDITO" in desc_upper:
+        return "Cartão de Crédito"
+    if "PAGAMENTO: CARTÃO DE DÉBITO" in desc_upper or "DEBITO" in desc_upper or "DÉBITO" in desc_upper:
+        return "Cartão de Débito"
+    if "CARTÃO" in desc_upper or "CARTAO" in desc_upper:
+        return "Cartão (Geral)"
+    return "Outro/Avulso"
+
 def validar_cpf(cpf):
     # Remove caracteres nao numericos
     cpf = re.sub(r'\D', '', cpf)
@@ -721,6 +759,16 @@ elif opcao == "👤 Clientes (CRM)":
             df_clientes = pd.DataFrame(tabela_dados, columns=["ID", "Nome", "WhatsApp", "E-mail", "CPF", "Endereco"])
             st.dataframe(df_clientes, use_container_width=True, hide_index=True)
             
+            # Botão de exportação de Clientes
+            csv_clientes = df_clientes.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Exportar Clientes para Excel (CSV)",
+                data=csv_clientes,
+                file_name="clientes_infinitytech.csv",
+                mime="text/csv",
+                key="btn_download_clientes"
+            )
+            
             st.write("---")
             st.subheader("Editar / Excluir Cadastro de Cliente")
             
@@ -905,6 +953,16 @@ elif opcao == "📦 Produtos & Estoque":
         if dados_produtos:
             df_prod = pd.DataFrame(dados_produtos, columns=["ID", "Marca", "Modelo", "Custo (R$)", "Mínimo (R$)", "Venda (R$)", "Disponível", "Total Cadastrado"])
             st.dataframe(df_prod, use_container_width=True, hide_index=True)
+            
+            # Botão de exportação do Estoque
+            csv_prod = df_prod.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Exportar Catálogo de Estoque para Excel (CSV)",
+                data=csv_prod,
+                file_name="estoque_infinitytech.csv",
+                mime="text/csv",
+                key="btn_download_estoque"
+            )
             
             st.write("---")
             st.subheader("Gerenciar Catálogo & Unidades de Estoque")
@@ -1633,16 +1691,19 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                         with col_st1:
                             if st.button("🛠️ Em Manutenção", key=f"btn_st_man_{id_lanc_os}", disabled=(status_os == "Manutencao")):
                                 executar_query("UPDATE ItensEstoque SET Status = 'Manutencao' WHERE IdItem = %s", (id_item_os,))
+                                adicionar_nota_os(id_lanc_os, f"Status alterado para 'Em Manutenção' por {st.session_state.user_name}")
                                 st.success("Status: Em Manutenção")
                                 st.rerun()
                         with col_st2:
                             if st.button("🔵 Pronto para Retirada", key=f"btn_st_pro_{id_lanc_os}", disabled=(status_os == "Pronto")):
                                 executar_query("UPDATE ItensEstoque SET Status = 'Pronto' WHERE IdItem = %s", (id_item_os,))
+                                adicionar_nota_os(id_lanc_os, f"Status alterado para 'Pronto para Retirada' por {st.session_state.user_name}")
                                 st.success("Status: Pronto para Retirada")
                                 st.rerun()
                         with col_st3:
                             if st.button("🟢 Entregue / Finalizado", key=f"btn_st_ent_{id_lanc_os}", disabled=(status_os == "Entregue")):
                                 executar_query("UPDATE ItensEstoque SET Status = 'Entregue' WHERE IdItem = %s", (id_item_os,))
+                                adicionar_nota_os(id_lanc_os, f"Status alterado para 'Entregue' por {st.session_state.user_name}")
                                 st.success("Status: Finalizado e Entregue")
                                 st.rerun()
                         
@@ -1930,7 +1991,7 @@ elif opcao == "📊 Financeiro & Caixa":
         st.header("Histórico de Fluxo de Caixa")
         
         # Filtros de data e tipo
-        col_f1, col_f2, col_f3 = st.columns(3)
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
         with col_f1:
             agora_sp = obter_agora_sp()
             data_inicio = st.date_input("De:", value=datetime(agora_sp.year, agora_sp.month, 1))
@@ -1938,6 +1999,8 @@ elif opcao == "📊 Financeiro & Caixa":
             data_fim = st.date_input("Até:", value=obter_agora_sp())
         with col_f3:
             tipo_filtro = st.selectbox("Filtrar por Tipo:", ["Todos", "Entradas (Receitas)", "Saídas (Despesas)"])
+        with col_f4:
+            metodo_filtro = st.selectbox("Forma de Pagamento:", ["Todos", "Pix", "Dinheiro", "Cartão de Crédito", "Cartão de Débito", "Outro/Avulso"])
             
         # Montagem da Query Dinâmica
         query_caixa = """
@@ -1962,11 +2025,23 @@ elif opcao == "📊 Financeiro & Caixa":
             total_s = 0.0
             tabela_final = []
             
+            # Métricas de formas de pagamento (apenas para Entradas/Receitas)
+            dados_metodos = {"Pix": 0.0, "Dinheiro": 0.0, "Cartão de Crédito": 0.0, "Cartão de Débito": 0.0, "Outro/Avulso": 0.0}
+            
             for item in caixa_dados:
                 id_l, tipo_l, valor_l, desc_l, date_l, nome_c = item
                 date_l = converter_para_sp(date_l)
                 nome_c_final = nome_c if nome_c else "Lançamento Avulso"
                 tipo_str = "🟢 Entrada" if tipo_l == 'E' else "🔴 Saída"
+                
+                # Extrair método de pagamento
+                metodo_item = extrair_metodo_pagamento(desc_l)
+                if tipo_l == 'E':
+                    dados_metodos[metodo_item] = dados_metodos.get(metodo_item, 0.0) + float(valor_l)
+                
+                # Aplicar filtro de método de pagamento
+                if metodo_filtro != "Todos" and metodo_item != metodo_filtro:
+                    continue
                 
                 if tipo_l == 'E':
                     total_e += float(valor_l)
@@ -1975,19 +2050,39 @@ elif opcao == "📊 Financeiro & Caixa":
                     
                 tabela_final.append([id_l, tipo_str, valor_l, desc_l, nome_c_final, date_l.strftime('%d/%m/%Y %H:%M')])
                 
-            df_fin = pd.DataFrame(tabela_final, columns=["ID Lançamento", "Tipo", "Valor (R$)", "Descrição", "Cliente/Origem", "Data"])
-            st.dataframe(df_fin, use_container_width=True, hide_index=True)
-            
-            # Resumo financeiro do período
-            st.write("---")
-            col_res1, col_res2, col_res3 = st.columns(3)
-            with col_res1:
-                st.info(f"🟢 **Total de Entradas:** R$ {total_e:.2f}")
-            with col_res2:
-                st.warning(f"🔴 **Total de Saídas:** R$ {total_s:.2f}")
-            with col_res3:
-                saldo_p = total_e - total_s
-                st.success(f"⚖️ **Saldo do Período:** R$ {saldo_p:.2f}")
+            if not tabela_final:
+                st.info("Nenhum lançamento corresponde à forma de pagamento selecionada.")
+            else:
+                df_fin = pd.DataFrame(tabela_final, columns=["ID Lançamento", "Tipo", "Valor (R$)", "Descrição", "Cliente/Origem", "Data"])
+                st.dataframe(df_fin, use_container_width=True, hide_index=True)
+                
+                # Botão de exportação do caixa filtrado
+                csv_fin = df_fin.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📥 Exportar Fluxo de Caixa para Excel (CSV)",
+                    data=csv_fin,
+                    file_name="fluxo_caixa_infinitytech.csv",
+                    mime="text/csv",
+                    key="btn_download_caixa"
+                )
+                
+                # Resumo financeiro do período
+                st.write("---")
+                col_res1, col_res2, col_res3 = st.columns(3)
+                with col_res1:
+                    st.info(f"🟢 **Total de Entradas:** R$ {total_e:.2f}")
+                with col_res2:
+                    st.warning(f"🔴 **Total de Saídas:** R$ {total_s:.2f}")
+                with col_res3:
+                    saldo_p = total_e - total_s
+                    st.success(f"⚖️ **Saldo do Período:** R$ {saldo_p:.2f}")
+                    
+                # Exibir gráfico de barras das formas de pagamento no faturamento
+                if sum(dados_metodos.values()) > 0:
+                    st.write("---")
+                    st.subheader("📈 Faturamento por Forma de Pagamento (No Período)")
+                    df_chart_metodos = pd.DataFrame(list(dados_metodos.items()), columns=["Forma de Pagamento", "Valor (R$)"]).set_index("Forma de Pagamento")
+                    st.bar_chart(df_chart_metodos, use_container_width=True)
                 
             # CRUD: Editar/Excluir lançamento do caixa
             st.write("---")
