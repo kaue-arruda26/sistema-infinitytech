@@ -760,7 +760,10 @@ elif opcao == "👤 Clientes (CRM)":
             st.dataframe(df_clientes, use_container_width=True, hide_index=True)
             
             # Botão de exportação de Clientes
-            csv_clientes = df_clientes.to_csv(index=False, sep=';').encode('utf-8-sig')
+            df_export = df_clientes.copy()
+            df_export["WhatsApp"] = df_export["WhatsApp"].apply(lambda x: f'="{x}"' if x and x != "---" else x)
+            df_export["CPF"] = df_export["CPF"].apply(lambda x: f'="{x}"' if x and x != "---" else x)
+            csv_clientes = df_export.to_csv(index=False, sep=';').encode('utf-8-sig')
             st.download_button(
                 label="📥 Exportar Clientes para Excel (CSV)",
                 data=csv_clientes,
