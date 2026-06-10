@@ -1905,7 +1905,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
 # =========================================================================
 elif opcao == "📊 Financeiro & Caixa":
     st.title("📊 Painel Financeiro & Fluxo de Caixa")
-    aba_lancamentos, aba_novo_lanc = st.tabs(["📊 Histórico de Caixa", "💸 Lançar Entrada/Saída Manual"])
+    aba_lancamentos, aba_novo_lanc, aba_dividas = st.tabs(["📊 Histórico de Caixa", "💸 Lançar Entrada/Saída Manual", "🤝 Contas a Pagar / Dívidas de Peças"])
     
     with aba_novo_lanc:
         st.header("Lançamento Financeiro Manual")
@@ -2029,6 +2029,248 @@ elif opcao == "📊 Financeiro & Caixa":
                         st.error(f"Erro ao deletar: {e}")
         else:
             st.info("Nenhum lançamento financeiro registrado neste período.")
+
+    with aba_dividas:
+        st.header("Controle de Dívidas & Contas a Pagar")
+        st.markdown("Registre e gerencie as dívidas com parceiros e fornecedores para compra de peças e serviços.")
+        
+        try:
+            # 1. Total Pendente
+            sum_pendente = executar_query("""
+                SELECT COALESCE(SUM(valor), 0) FROM dividas WHERE status = 'Pendente'
+            """, fetch='one')[0]
+
+            # 2. Vencidas/Overdue
+            sum_vencido = executar_query("""
+                SELECT COALESCE(SUM(valor), 0) FROM dividas WHERE status = 'Pendente' AND data_vencimento < CURRENT_DATE
+            """, fetch='one')[0]
+
+            # 3. Pago no mês atual
+            agora_sp = obter_agora_sp()
+            primeiro_dia_mes = datetime(agora_sp.year, agora_sp.month, 1).date()
+            sum_pago_mes = executar_query("""
+                SELECT COALESCE(SUM(valor), 0) FROM dividas 
+                WHERE status = 'Pago' AND CAST(data_pagamento AS DATE) >= %s
+            """, (primeiro_dia_mes,), fetch='one')[0]
+
+            col_d1, col_d2, col_d3 = st.columns(3)
+            with col_d1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Total Pendente</div>
+                    <div class="metric-value val-danger">R$ {sum_pendente:,.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_d2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Dívidas Vencidas</div>
+                    <div class="metric-value val-warning">R$ {sum_vencido:,.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_d3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Pago neste Mês</div>
+                    <div class="metric-value val-success">R$ {sum_pago_mes:,.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.write("---")
+            sub_aba_consulta, sub_aba_cadastro = st.tabs(["🔍 Consultar Dívidas", "➕ Registrar Nova Dívida"])
+
+            with sub_aba_cadastro:
+                st.subheader("Registrar Nova Dívida")
+                with st.form("form_nova_divida", clear_on_submit=True):
+                    credor = st.text_input("Credor (Fornecedor / Parceiro / Nome):", placeholder="Ex: Distribuidora São Paulo, Parceiro João")
+                    valor = st.number_input("Valor da Dívida (R$):", min_value=0.01, step=1.00)
+                    
+                    # O.S. Vinculada dropdown
+                    os_list_db = executar_query("""
+                        SELECT f.IdLancamento, c.Nome, p.Marca, p.Modelo
+                        FROM FluxoCaixa f
+                        JOIN Clientes c ON f.IdCliente = c.IdCliente
+                        JOIN ItensEstoque i ON f.IdItem = i.IdItem
+                        JOIN Produtos p ON i.IdProduto = p.IdProduto
+                        WHERE f.Descricao LIKE '[ASSISTENCIA]%%'
+                        ORDER BY f.IdLancamento DESC
+                    """, fetch='all')
+                    
+                    os_options = {"Nenhuma OS Vinculada": None}
+                    if os_list_db:
+                        for row in os_list_db:
+                            os_options[f"OS #{row[0]} - {row[1]} ({row[2]} {row[3]})"] = row[0]
+                            
+                    os_selecionada = st.selectbox("Vincular a uma Ordem de Serviço (Opcional):", list(os_options.keys()))
+                    id_os_fk = os_options[os_selecionada]
+                    
+                    col_fd1, col_fd2 = st.columns(2)
+                    with col_fd1:
+                        data_d = st.date_input("Data da Dívida:", value=obter_agora_sp().date())
+                    with col_fd2:
+                        data_v = st.date_input("Data de Vencimento:", value=obter_agora_sp().date() + timedelta(days=7))
+                        
+                    descricao = st.text_input("Descrição da Peça / Serviço:", placeholder="Ex: Tela LCD Dell Inspiron, Teclado Mecânico Razer")
+                    obs = st.text_area("Observações Adicionais:")
+                    
+                    if st.form_submit_button("Gravar Dívida"):
+                        if credor and descricao:
+                            try:
+                                executar_query("""
+                                    INSERT INTO dividas (credor, descricao, valor, data_divida, data_vencimento, id_os, observacoes, status)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'Pendente')
+                                """, (credor, descricao, valor, data_d, data_v, id_os_fk, obs))
+                                st.success("Dívida registrada com sucesso!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao salvar dívida: {e}")
+                        else:
+                            st.warning("Credor e Descrição são campos obrigatórios.")
+
+            with sub_aba_consulta:
+                st.subheader("Filtros de Busca")
+                col_fc1, col_fc2 = st.columns(2)
+                with col_fc1:
+                    filtro_status = st.selectbox("Status da Dívida:", ["Todas", "Pendente", "Pago"], key="filtro_divida_status")
+                with col_fc2:
+                    termo_busca_divida = st.text_input("Buscar por Credor ou Descrição:", key="busca_divida_termo")
+                    
+                query_dividas = """
+                    SELECT d.iddivida, d.credor, d.descricao, d.valor, d.data_divida, d.data_vencimento, d.status, d.data_pagamento, d.id_os, d.observacoes
+                    FROM dividas d
+                    WHERE 1=1
+                """
+                params_dividas = []
+                
+                if filtro_status == "Pendente":
+                    query_dividas += " AND d.status = 'Pendente'"
+                elif filtro_status == "Pago":
+                    query_dividas += " AND d.status = 'Pago'"
+                    
+                if termo_busca_divida:
+                    query_dividas += " AND (d.credor ILIKE %s OR d.descricao ILIKE %s OR d.observacoes ILIKE %s)"
+                    busca_val = f"%{termo_busca_divida}%"
+                    params_dividas.extend([busca_val, busca_val, busca_val])
+                    
+                query_dividas += " ORDER BY d.iddivida DESC"
+                
+                dados_dividas = executar_query(query_dividas, params_dividas, fetch='all')
+                
+                if dados_dividas:
+                    tabela_dividas = []
+                    hoje_date = obter_agora_sp().date()
+                    
+                    for item in dados_dividas:
+                        id_d, credor_d, desc_d, valor_d, date_div, date_venc, stat_d, date_pag, id_os_d, obs_d = item
+                        
+                        os_ref_str = f"OS #{id_os_d}" if id_os_d else "Sem vínculo"
+                        venc_str = date_venc.strftime('%d/%m/%Y') if date_venc else "Sem prazo"
+                        pag_str = converter_para_sp(date_pag).strftime('%d/%m/%Y %H:%M') if date_pag else "---"
+                        
+                        if stat_d == 'Pendente':
+                            if date_venc and date_venc < hoje_date:
+                                stat_display = "⚠️ Vencida"
+                            else:
+                                stat_display = "🔴 Pendente"
+                        else:
+                            stat_display = "🟢 Pago"
+                            
+                        tabela_dividas.append([
+                            id_d,
+                            credor_d,
+                            desc_d,
+                            valor_d,
+                            stat_display,
+                            date_div.strftime('%d/%m/%Y') if date_div else "---",
+                            venc_str,
+                            pag_str,
+                            os_ref_str
+                        ])
+                        
+                    df_div = pd.DataFrame(tabela_dividas, columns=[
+                        "ID", "Credor", "Descrição", "Valor (R$)", "Status", "Data Início", "Vencimento", "Data Pagamento", "Vínculo O.S."
+                    ])
+                    st.dataframe(df_div, use_container_width=True, hide_index=True)
+                    
+                    st.write("---")
+                    st.subheader("Gerenciar / Quitar Dívida")
+                    
+                    lista_select_dividas = {}
+                    for item in dados_dividas:
+                        id_d, credor_d, desc_d, valor_d, _, _, stat_d, _, _, _ = item
+                        status_ind = "Pendente" if stat_d == 'Pendente' else "Paga"
+                        lista_select_dividas[f"ID {id_d} - {credor_d} - R$ {valor_d:.2f} ({status_ind})"] = item
+                        
+                    divida_selecionada_str = st.selectbox("Selecione a Dívida para atualizar:", list(lista_select_dividas.keys()))
+                    
+                    if divida_selecionada_str:
+                        d_sel = lista_select_dividas[divida_selecionada_str]
+                        id_d, credor_d, desc_d, valor_d, date_div, date_venc, stat_d, date_pag, id_os_d, obs_d = d_sel
+                        
+                        col_ad1, col_ad2 = st.columns(2)
+                        with col_ad1:
+                            st.markdown(f"**Credor:** {credor_d}")
+                            st.markdown(f"**Item/Descrição:** {desc_d}")
+                            st.markdown(f"**Valor:** R$ {valor_d:.2f}")
+                            st.markdown(f"**Status Atual:** {stat_d}")
+                            if obs_d:
+                                st.markdown(f"**Anotações:** {obs_d}")
+                        with col_ad2:
+                            if stat_d == 'Pendente':
+                                st.write("🔒 **Quitação de Dívida**")
+                                quitar_caixa = st.checkbox("Lançar automaticamente saída no fluxo de caixa", value=True, key=f"quitar_caixa_check_{id_d}")
+                                if st.button("Quitar Dívida (Marcar como Pago)", type="primary", key=f"btn_quitar_{id_d}"):
+                                    try:
+                                        agora_timestamp = obter_agora_sp()
+                                        conn = abrir_conexao()
+                                        cursor = conn.cursor()
+                                        
+                                        cursor.execute("""
+                                            UPDATE dividas 
+                                            SET status = 'Pago', data_pagamento = %s 
+                                            WHERE iddivida = %s
+                                        """, (agora_timestamp, id_d))
+                                        
+                                        if quitar_caixa:
+                                            id_cliente_os = None
+                                            id_item_os = None
+                                            if id_os_d:
+                                                cursor.execute("SELECT IdCliente, IdItem FROM FluxoCaixa WHERE IdLancamento = %s", (id_os_d,))
+                                                row_os = cursor.fetchone()
+                                                if row_os:
+                                                    id_cliente_os = row_os[0]
+                                                    id_item_os = row_os[1]
+                                            
+                                            desc_fluxo = f"[CUSTO PEÇA][DÍVIDA QUITADA] - Credor: {credor_d} - Item: {desc_d}"
+                                            cursor.execute("""
+                                                INSERT INTO FluxoCaixa (Tipo, Valor, Descricao, IdCliente, IdItem)
+                                                VALUES ('S', %s, %s, %s, %s)
+                                            """, (valor_d, desc_fluxo, id_cliente_os, id_item_os))
+                                            
+                                        conn.commit()
+                                        conn.close()
+                                        st.success(f"Dívida para {credor_d} quitada com sucesso!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao quitar dívida: {e}")
+                            else:
+                                st.success("Esta dívida já está quitada!")
+                                st.markdown(f"**Pago em:** {converter_para_sp(date_pag).strftime('%d/%m/%Y %H:%M') if date_pag else '---'}")
+                                
+                        st.write("---")
+                        st.write("🗑️ **Excluir Dívida**")
+                        confirmar_excluir_divida = st.checkbox(f"Confirmo que desejo apagar permanentemente a dívida ID {id_d} (isso NÃO afeta o fluxo de caixa antigo caso já lançado).", key=f"conf_del_div_{id_d}")
+                        if st.button("Apagar Registro de Dívida", type="primary", disabled=not confirmar_excluir_divida, key=f"btn_del_div_{id_d}"):
+                            try:
+                                executar_query("DELETE FROM dividas WHERE iddivida = %s", (id_d,))
+                                st.success("Registro de dívida apagado com sucesso!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao apagar dívida: {e}")
+                else:
+                    st.info("Nenhuma dívida cadastrada ou correspondente aos filtros.")
+        except Exception as e:
+            st.error(f"Erro ao carregar aba de dívidas: {e}")
 
 # =========================================================================
 # 9. TELA: CONTAS & ACESSOS (CRUD DE USUÁRIOS - APENAS ADM)
