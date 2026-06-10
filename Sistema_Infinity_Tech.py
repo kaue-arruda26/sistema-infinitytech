@@ -760,7 +760,7 @@ elif opcao == "👤 Clientes (CRM)":
             st.dataframe(df_clientes, use_container_width=True, hide_index=True)
             
             # Botão de exportação de Clientes
-            csv_clientes = df_clientes.to_csv(index=False).encode('utf-8-sig')
+            csv_clientes = df_clientes.to_csv(index=False, sep=';').encode('utf-8-sig')
             st.download_button(
                 label="📥 Exportar Clientes para Excel (CSV)",
                 data=csv_clientes,
@@ -955,7 +955,7 @@ elif opcao == "📦 Produtos & Estoque":
             st.dataframe(df_prod, use_container_width=True, hide_index=True)
             
             # Botão de exportação do Estoque
-            csv_prod = df_prod.to_csv(index=False).encode('utf-8-sig')
+            csv_prod = df_prod.to_csv(index=False, sep=';').encode('utf-8-sig')
             st.download_button(
                 label="📥 Exportar Catálogo de Estoque para Excel (CSV)",
                 data=csv_prod,
@@ -2057,7 +2057,7 @@ elif opcao == "📊 Financeiro & Caixa":
                 st.dataframe(df_fin, use_container_width=True, hide_index=True)
                 
                 # Botão de exportação do caixa filtrado
-                csv_fin = df_fin.to_csv(index=False).encode('utf-8-sig')
+                csv_fin = df_fin.to_csv(index=False, sep=';').encode('utf-8-sig')
                 st.download_button(
                     label="📥 Exportar Fluxo de Caixa para Excel (CSV)",
                     data=csv_fin,
