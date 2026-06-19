@@ -5,6 +5,11 @@ import pandas as pd
 import streamlit.components.v1 as components
 from datetime import datetime, timezone, timedelta
 import requests
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+
 
 def converter_para_sp(dt):
     if dt is None:
@@ -258,6 +263,7 @@ def realizar_login(usuario, senha):
             st.session_state.logged_in = True
             st.session_state.user_role = user_data[1]
             st.session_state.user_name = user_data[2]
+            st.session_state.ocultar_valores = False
             st.success("Login realizado com sucesso!")
             st.rerun()
         else:
@@ -345,7 +351,7 @@ if not st.session_state.logged_in:
     
     with col_l1:
         # Exibir logotipo completo
-        st.image("logo.png", use_container_width=True)
+        st.image(LOGO_PATH, use_container_width=True)
         
     with col_l2:
         st.markdown('<div class="login-card">', unsafe_allow_html=True)
@@ -420,6 +426,7 @@ if not st.session_state.logged_in:
                                     st.session_state.logged_in = True
                                     st.session_state.user_role = role_desejada
                                     st.session_state.user_name = cad_nome
+                                    st.session_state.ocultar_valores = False
                                     st.toast("Conta ADM criada com sucesso!", icon="👑")
                                     st.rerun()
                             else:
@@ -430,6 +437,7 @@ if not st.session_state.logged_in:
                                 st.session_state.logged_in = True
                                 st.session_state.user_role = role_desejada
                                 st.session_state.user_name = cad_nome
+                                st.session_state.ocultar_valores = False
                                 st.toast("Conta Lojista criada com sucesso!", icon="💼")
                                 st.rerun()
                         except psycopg2.IntegrityError:
@@ -447,7 +455,7 @@ if not st.session_state.logged_in:
 # =========================================================================
 with st.sidebar:
     # Exibir logotipo da empresa centralizado no topo da barra lateral
-    st.image("logo.png", use_container_width=True)
+    st.image(LOGO_PATH, use_container_width=True)
     st.markdown("""
     <div class="sidebar-header" style="margin-top: -10px; margin-bottom: 15px;">
         <h2 class="sidebar-title">InfinityTech ERP</h2>
@@ -480,6 +488,7 @@ with st.sidebar:
         st.session_state.logged_in = False
         st.session_state.user_role = ""
         st.session_state.user_name = ""
+        st.session_state.ocultar_valores = False
         st.rerun()
 
 # =========================================================================
@@ -713,34 +722,39 @@ elif opcao == "👤 Clientes (CRM)":
             
             st.markdown("##### Endereço Residencial")
             
-            # Input de CEP com busca automatica colocado no inicio do endereco
-            cep_key = f"inserir_cep_{st.session_state.cep_key_counter}"
-            cep_val = st.text_input("CEP (somente numeros):", placeholder="Ex: 01103010", max_chars=8, key=cep_key, help="Digite os 8 numeros do CEP para buscar o endereco automaticamente")
-            cep_clean = re.sub(r'\D', '', cep_val)
+            # Row 1 of address: CEP, Logradouro, Número, Complemento
+            col_e1, col_e2, col_e3, col_e4 = st.columns([1.5, 3, 1, 1.5])
+            with col_e1:
+                cep_key = f"inserir_cep_{st.session_state.cep_key_counter}"
+                cep_val = st.text_input("CEP (somente numeros):", placeholder="Ex: 01103010", max_chars=8, key=cep_key, help="Digite os 8 numeros do CEP para buscar o endereco automaticamente")
             
+            cep_clean = re.sub(r'\D', '', cep_val)
             if len(cep_clean) == 8 and cep_clean != st.session_state.ultimo_cep_inserido:
                 data_cep = buscar_cep(cep_clean)
                 if data_cep:
                     st.session_state.cep_data_inserido = data_cep
                     st.session_state.ultimo_cep_inserido = cep_clean
+                    st.session_state["cad_logradouro"] = data_cep.get("logradouro", "")
+                    st.session_state["cad_bairro"] = data_cep.get("bairro", "")
+                    st.session_state["cad_cidade"] = data_cep.get("localidade", "")
+                    st.session_state["cad_estado"] = data_cep.get("uf", "")
                     st.toast("Endereço preenchido automaticamente!", icon="📍")
                 else:
                     st.error("CEP nao localizado.")
             
-            col_e1, col_e2, col_e3 = st.columns([3, 1, 2])
-            with col_e1:
-                logradouro = st.text_input("Logradouro (Rua/Avenida):", value=st.session_state.cep_data_inserido.get("logradouro", ""), key="cad_logradouro")
             with col_e2:
-                numero = st.text_input("Numero:", key="cad_numero")
+                logradouro = st.text_input("Logradouro (Rua/Avenida):", value=st.session_state.cep_data_inserido.get("logradouro", ""), key="cad_logradouro")
             with col_e3:
+                numero = st.text_input("Numero:", key="cad_numero")
+            with col_e4:
                 complemento = st.text_input("Complemento:", key="cad_complemento")
                 
-            col_e4, col_e5, col_e6 = st.columns([2, 2, 1])
-            with col_e4:
-                bairro = st.text_input("Bairro:", value=st.session_state.cep_data_inserido.get("bairro", ""), key="cad_bairro")
+            col_e5, col_e6, col_e7 = st.columns([2, 2, 1])
             with col_e5:
-                cidade = st.text_input("Cidade:", value=st.session_state.cep_data_inserido.get("localidade", ""), key="cad_cidade")
+                bairro = st.text_input("Bairro:", value=st.session_state.cep_data_inserido.get("bairro", ""), key="cad_bairro")
             with col_e6:
+                cidade = st.text_input("Cidade:", value=st.session_state.cep_data_inserido.get("localidade", ""), key="cad_cidade")
+            with col_e7:
                 estado = st.text_input("UF:", value=st.session_state.cep_data_inserido.get("uf", ""), key="cad_estado")
                 
             st.write("")
@@ -769,8 +783,14 @@ elif opcao == "👤 Clientes (CRM)":
                             st.success(f"Cliente '{nome}' cadastrado com sucesso!")
                             st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon="🎉")
                             st.rerun()
-                        except psycopg2.IntegrityError:
-                            st.error("Erro: WhatsApp ou CPF já cadastrado no sistema.")
+                        except psycopg2.IntegrityError as e:
+                            err_msg = str(e)
+                            if "whatsapp" in err_msg:
+                                st.error("Erro: O WhatsApp digitado já está cadastrado para outro cliente.")
+                            elif "documento" in err_msg:
+                                st.error("Erro: O CPF digitado já está cadastrado para outro cliente.")
+                            else:
+                                st.error("Erro: WhatsApp ou CPF já cadastrado no sistema.")
                         except Exception as e:
                             st.error(f"Erro ao salvar: {e}")
                 else:
@@ -824,84 +844,123 @@ elif opcao == "👤 Clientes (CRM)":
                 # Inicializando session state do CEP de edicao para este cliente se nao existir ou se mudou o cliente
                 if "cliente_selecionado_id" not in st.session_state or st.session_state.cliente_selecionado_id != id_cli:
                     st.session_state.cliente_selecionado_id = id_cli
-                    st.session_state.ultimo_cep_editado = re.sub(r'\D', '', cep_cli) if cep_cli else ""
-                    st.session_state.cep_data_editado = {
-                        "logradouro": log_cli if log_cli else "",
-                        "bairro": bai_cli if bai_cli else "",
-                        "localidade": cid_cli if cid_cli else "",
-                        "uf": est_cli if est_cli else ""
-                    }
+                    cep_clean_val = re.sub(r'\D', '', cep_cli) if cep_cli else ""
+                    st.session_state.ultimo_cep_editado = cep_clean_val
+                    st.session_state["edit_cep_input"] = cep_clean_val
+                    
+                    # Se o cliente já tem CEP no banco, mas o endereço está vazio (ex: falha de rede ao cadastrar),
+                    # tenta buscar na API para preencher os dados de endereço automaticamente na edição.
+                    data_cep_edit = None
+                    if len(cep_clean_val) == 8 and (not log_cli or not bai_cli or not cid_cli):
+                        data_cep_edit = buscar_cep(cep_clean_val)
+                    
+                    if data_cep_edit:
+                        st.session_state.cep_data_editado = data_cep_edit
+                        st.session_state["edit_logradouro"] = data_cep_edit.get("logradouro", "")
+                        st.session_state["edit_bairro"] = data_cep_edit.get("bairro", "")
+                        st.session_state["edit_cidade"] = data_cep_edit.get("localidade", "")
+                        st.session_state["edit_estado"] = data_cep_edit.get("uf", "")
+                    else:
+                        st.session_state.cep_data_editado = {
+                            "logradouro": log_cli if log_cli else "",
+                            "bairro": bai_cli if bai_cli else "",
+                            "localidade": cid_cli if cid_cli else "",
+                            "uf": est_cli if est_cli else ""
+                        }
+                        st.session_state["edit_logradouro"] = log_cli if log_cli else ""
+                        st.session_state["edit_bairro"] = bai_cli if bai_cli else ""
+                        st.session_state["edit_cidade"] = cid_cli if cid_cli else ""
+                        st.session_state["edit_estado"] = est_cli if est_cli else ""
+                        
+                    st.session_state["edit_nome"] = nome_cli
+                    st.session_state["edit_whatsapp"] = wa_cli
+                    st.session_state["edit_cpf"] = doc_cli if doc_cli else ""
+                    st.session_state["edit_email"] = email_cli if email_cli else ""
+                    st.session_state["edit_numero"] = num_cli if num_cli else ""
+                    st.session_state["edit_complemento"] = comp_cli if comp_cli else ""
 
                 with st.container(border=True):
                     st.markdown(f"#### ✏️ Edicao de Ficha: {nome_cli}")
                     
-                    # Input de CEP para edicao fora do form (apenas numeros)
-                    cep_edit_input = st.text_input("CEP (somente numeros):", value=st.session_state.ultimo_cep_editado, key="edit_cep_input", max_chars=8)
+                    st.markdown("##### Informacoes Pessoais")
+                    col_pe1, col_pe2 = st.columns(2)
+                    with col_pe1:
+                        novo_nome = st.text_input("Nome Completo:", value=nome_cli, key="edit_nome")
+                        novo_whatsapp = st.text_input("WhatsApp:", value=wa_cli, key="edit_whatsapp")
+                    with col_pe2:
+                        novo_documento = st.text_input("CPF:", value=doc_cli if doc_cli else "", max_chars=11, key="edit_cpf")
+                        novo_email = st.text_input("E-mail:", value=email_cli if email_cli else "", key="edit_email")
+                        
+                    st.markdown("##### Endereco Residencial")
+                    col_ee1, col_ee2, col_ee3, col_ee4 = st.columns([1.5, 3, 1, 1.5])
+                    with col_ee1:
+                        cep_edit_input = st.text_input("CEP (somente numeros):", value=st.session_state.ultimo_cep_editado, key="edit_cep_input", max_chars=8)
+                        
                     cep_edit_clean = re.sub(r'\D', '', cep_edit_input)
-                    
                     if len(cep_edit_clean) == 8 and cep_edit_clean != re.sub(r'\D', '', st.session_state.ultimo_cep_editado):
                         data_cep_edit = buscar_cep(cep_edit_clean)
                         if data_cep_edit:
                             st.session_state.cep_data_editado = data_cep_edit
                             st.session_state.ultimo_cep_editado = cep_edit_clean
+                            st.session_state["edit_logradouro"] = data_cep_edit.get("logradouro", "")
+                            st.session_state["edit_bairro"] = data_cep_edit.get("bairro", "")
+                            st.session_state["edit_cidade"] = data_cep_edit.get("localidade", "")
+                            st.session_state["edit_estado"] = data_cep_edit.get("uf", "")
                             st.toast("Endereco de edicao auto-preenchido!", icon="📍")
+                            st.rerun()
                         else:
                             st.error("CEP nao localizado.")
 
-                    with st.form("form_editar_cliente"):
-                        st.markdown("##### Informacoes Pessoais")
-                        col_pe1, col_pe2 = st.columns(2)
-                        with col_pe1:
-                            novo_nome = st.text_input("Nome Completo:", value=nome_cli)
-                            novo_whatsapp = st.text_input("WhatsApp:", value=wa_cli)
-                        with col_pe2:
-                            novo_documento = st.text_input("CPF:", value=doc_cli if doc_cli else "", max_chars=11)
-                            novo_email = st.text_input("E-mail:", value=email_cli if email_cli else "")
-                            
-                        st.markdown("##### Endereco Residencial")
-                        col_ee1, col_ee2, col_ee3 = st.columns([3, 1, 2])
-                        with col_ee1:
-                            novo_log = st.text_input("Logradouro:", value=st.session_state.cep_data_editado.get("logradouro", ""))
-                        with col_ee2:
-                            novo_num = st.text_input("Numero:", value=num_cli if num_cli else "")
-                        with col_ee3:
-                            novo_comp = st.text_input("Complemento:", value=comp_cli if comp_cli else "")
-                            
-                        col_ee4, col_ee5, col_ee6 = st.columns([2, 2, 1])
-                        with col_ee4:
-                            novo_bai = st.text_input("Bairro:", value=st.session_state.cep_data_editado.get("bairro", ""))
-                        with col_ee5:
-                            novo_cid = st.text_input("Cidade:", value=st.session_state.cep_data_editado.get("localidade", ""))
-                        with col_ee6:
-                            novo_est = st.text_input("UF:", value=st.session_state.cep_data_editado.get("uf", ""))
-                            
-                        st.write("")
-                        if st.form_submit_button("Salvar Alteracoes", type="primary", use_container_width=True):
-                            if novo_nome and novo_whatsapp:
-                                cpf_edit_clean = re.sub(r'\D', '', novo_documento) if novo_documento else ""
-                                if cpf_edit_clean and not validar_cpf(cpf_edit_clean):
-                                    st.error("Erro: O CPF digitado e invalido!")
-                                else:
-                                    try:
-                                        executar_query("""
-                                            UPDATE Clientes 
-                                            SET Nome = %s, Documento = %s, WhatsApp = %s, Email = %s,
-                                                CEP = %s, Logradouro = %s, Numero = %s, Complemento = %s,
-                                                Bairro = %s, Cidade = %s, Estado = %s
-                                            WHERE IdCliente = %s
-                                        """, (novo_nome, cpf_edit_clean if cpf_edit_clean else None, novo_whatsapp, novo_email if novo_email else None,
-                                              cep_edit_clean if cep_edit_clean else None, novo_log, novo_num, novo_comp, novo_bai, novo_cid, novo_est, id_cli))
-                                        
-                                        # Limpa estado de edicao
-                                        if "cliente_selecionado_id" in st.session_state:
-                                            del st.session_state.cliente_selecionado_id
-                                            
-                                        st.success(f"Cadastro de '{novo_nome}' atualizado com sucesso!")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Erro ao atualizar: {e}")
+                    with col_ee2:
+                        novo_log = st.text_input("Logradouro:", value=st.session_state.cep_data_editado.get("logradouro", ""), key="edit_logradouro")
+                    with col_ee3:
+                        novo_num = st.text_input("Numero:", value=num_cli if num_cli else "", key="edit_numero")
+                    with col_ee4:
+                        novo_comp = st.text_input("Complemento:", value=comp_cli if comp_cli else "", key="edit_complemento")
+                        
+                    col_ee5, col_ee6, col_ee7 = st.columns([2, 2, 1])
+                    with col_ee5:
+                        novo_bai = st.text_input("Bairro:", value=st.session_state.cep_data_editado.get("bairro", ""), key="edit_bairro")
+                    with col_ee6:
+                        novo_cid = st.text_input("Cidade:", value=st.session_state.cep_data_editado.get("localidade", ""), key="edit_cidade")
+                    with col_ee7:
+                        novo_est = st.text_input("UF:", value=st.session_state.cep_data_editado.get("uf", ""), key="edit_estado")
+                        
+                    st.write("")
+                    if st.button("Salvar Alteracoes", type="primary", use_container_width=True):
+                        if novo_nome and novo_whatsapp:
+                            cpf_edit_clean = re.sub(r'\D', '', novo_documento) if novo_documento else ""
+                            if cpf_edit_clean and not validar_cpf(cpf_edit_clean):
+                                st.error("Erro: O CPF digitado e invalido!")
                             else:
-                                st.warning("Nome e WhatsApp sao obrigatorios.")
+                                try:
+                                    executar_query("""
+                                        UPDATE Clientes 
+                                        SET Nome = %s, Documento = %s, WhatsApp = %s, Email = %s,
+                                            CEP = %s, Logradouro = %s, Numero = %s, Complemento = %s,
+                                            Bairro = %s, Cidade = %s, Estado = %s
+                                        WHERE IdCliente = %s
+                                    """, (novo_nome, cpf_edit_clean if cpf_edit_clean else None, novo_whatsapp, novo_email if novo_email else None,
+                                          cep_edit_clean if cep_edit_clean else None, novo_log, novo_num, novo_comp, novo_bai, novo_cid, novo_est, id_cli))
+                                    
+                                    # Limpa estado de edicao
+                                    if "cliente_selecionado_id" in st.session_state:
+                                        del st.session_state.cliente_selecionado_id
+                                        
+                                    st.success(f"Cadastro de '{novo_nome}' atualizado com sucesso!")
+                                    st.rerun()
+                                except psycopg2.IntegrityError as e:
+                                    err_msg = str(e)
+                                    if "whatsapp" in err_msg:
+                                        st.error("Erro: O WhatsApp digitado já está cadastrado para outro cliente.")
+                                    elif "documento" in err_msg:
+                                        st.error("Erro: O CPF digitado já está cadastrado para outro cliente.")
+                                    else:
+                                        st.error("Erro: WhatsApp ou CPF já cadastrado no sistema.")
+                                except Exception as e:
+                                    st.error(f"Erro ao atualizar: {e}")
+                        else:
+                            st.warning("Nome e WhatsApp sao obrigatorios.")
                     
                     # Exclusão fora do formulário (apenas ADM)
                     if st.session_state.user_role == 'adm':
@@ -1400,8 +1459,14 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                 col_m1, col_m2 = st.columns(2)
                 with col_m1: marca_equipamento = st.text_input("Marca do Aparelho (Ex: Dell, Apple):")
                 with col_m2: modelo_equipamento = st.text_input("Modelo / Configuração (Ex: Inspiron 15, Macbook Pro):")
+                
+                col_val1, col_val2 = st.columns(2)
+                with col_val1:
+                    valor_os = st.number_input("Preço Inicial/Estimado do Conserto (R$):", value=0.0, min_value=0.0)
+                with col_val2:
+                    custo_os = st.number_input("Custo Inicial da(s) Peça(s) (R$):", value=0.0, min_value=0.0)
+                
                 sn_equipamento = st.text_input("Número de Série do Equipamento (Opcional):")
-                valor_os = st.number_input("Preço Inicial/Estimado do Conserto (R$):", value=0.0, min_value=0.0)
                 defeito_os = st.text_area("Defeito / Relato do Cliente / Diagnóstico Inicial:")
                 
                 if st.button("Abrir Ordem de Serviço", type="primary"):
@@ -1414,8 +1479,8 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             modelo_os_com_tipo = f"[Notebook] {modelo_equipamento}"
                             cursor.execute("""
                                 INSERT INTO Produtos (Marca, Modelo, CustoProduto, ValorMinimo, ValorVenda)
-                                VALUES (%s, %s, 0, 0, %s) RETURNING IdProduto;
-                            """, (marca_equipamento, modelo_os_com_tipo, valor_os))
+                                VALUES (%s, %s, %s, 0, %s) RETURNING IdProduto;
+                            """, (marca_equipamento, modelo_os_com_tipo, custo_os, valor_os))
                             id_prod_os = cursor.fetchone()[0]
                             
                             # Cadastra o item com status 'Manutencao'
@@ -1432,6 +1497,14 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 VALUES (%s, %s, 'E', %s, %s) RETURNING IdLancamento;
                             """, (id_item_os, id_cli_os, valor_os, f"[ASSISTENCIA] - {defeito_os}"))
                             id_lancamento_os = cursor.fetchone()[0]
+                            
+                            # Se houver custo inicial, lança a saída correspondente no caixa (despesa)
+                            if custo_os > 0:
+                                desc_despesa_peca = f"[CUSTO PEÇA] - OS #{id_lancamento_os} - {marca_equipamento} {modelo_equipamento}"
+                                cursor.execute("""
+                                    INSERT INTO FluxoCaixa (IdItem, IdCliente, Tipo, Valor, Descricao)
+                                    VALUES (%s, %s, 'S', %s, %s)
+                                """, (id_item_os, id_cli_os, 'S', custo_os, desc_despesa_peca))
                             
                             conn.commit()
                             conn.close()
@@ -1508,7 +1581,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             "nome_cli": nome_cli,
                             "produtos_resumo_dict": {},
                             "seriais_list": [],
-                            "status": "Vendido",
+                            "status": status,
                             "valor_total": 0.0,
                             "descricao": desc,
                             "data": data,
@@ -1757,21 +1830,30 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             if not whats_limpo.startswith("55"):
                                 whats_limpo = "55" + whats_limpo
                                 
+                            msg_abertura = f"Olá, {nome_cli}! Aqui é da Infinity Tech. Recebemos o seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) para análise. A sua Ordem de Serviço é a Nº {id_lanc_os}. Assim que realizarmos o diagnóstico, entraremos em contato!"
+                            msg_orcamento = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O orçamento para o conserto do seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da OS Nº {id_lanc_os} ficou em R$ {valor_os:.2f}. Podemos prosseguir com o serviço?"
+                            msg_aguardando = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da OS Nº {id_lanc_os} está aguardando a chegada de peças para finalizarmos a manutenção."
                             msg_manutencao = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} já está em manutenção na nossa assistência técnica. Assim que estiver pronto, entraremos em contato!"
                             msg_pronto = f"Olá, {nome_cli}! Aqui é da Infinity Tech. Temos boas notícias: o seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} está PRONTO! Você já pode vir retirá-lo na nossa loja. Valor final: R$ {valor_os:.2f}."
                             msg_entregue = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} foi entregue com sucesso e a O.S. foi finalizada. Agradecemos a preferência!"
                             
                             import urllib.parse
+                            link_abe = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_abertura)}"
+                            link_orc = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_orcamento)}"
+                            link_agu = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_aguardando)}"
                             link_man = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_manutencao)}"
                             link_pro = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_pronto)}"
                             link_ent = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_entregue)}"
                             
                             col_w1, col_w2, col_w3 = st.columns(3)
                             with col_w1:
+                                st.link_button("📝 Enviar: Abertura / Recebido", link_abe, use_container_width=True)
                                 st.link_button("🛠️ Enviar: Em Manutenção", link_man, use_container_width=True)
                             with col_w2:
+                                st.link_button("💸 Enviar: Orçamento", link_orc, use_container_width=True)
                                 st.link_button("🔵 Enviar: Pronto p/ Retirada", link_pro, use_container_width=True)
                             with col_w3:
+                                st.link_button("⏳ Enviar: Aguardando Peças", link_agu, use_container_width=True)
                                 st.link_button("🟢 Enviar: Equipamento Entregue", link_ent, use_container_width=True)
                         else:
                             st.warning("⚠️ Cliente não possui WhatsApp cadastrado para enviar atualizações.")
@@ -1893,6 +1975,95 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Erro ao salvar: {e}")
+                                    
+                        # Controle de Status da Venda / Assistência
+                        st.write("---")
+                        st.markdown("#### ⚙️ Controle de Status da Venda / Assistência")
+                        
+                        status_venda = atend_sel["status"]
+                        ids_itens_venda = [it["id_item"] for it in itens_venda if it["id_item"] is not None]
+                        
+                        col_st1, col_st2, col_st3 = st.columns(3)
+                        with col_st1:
+                            if st.button("🛠️ Em Manutenção", key=f"btn_st_man_venda_{id_lanc_ref}", disabled=(status_venda == "Manutencao")):
+                                if ids_itens_venda:
+                                    executar_query("UPDATE ItensEstoque SET Status = 'Manutencao' WHERE IdItem = ANY(%s)", (ids_itens_venda,))
+                                for it in itens_venda:
+                                    adicionar_nota_os(it["id_lanc"], f"Status alterado para 'Em Manutenção' por {st.session_state.user_name}")
+                                st.success("Status: Em Manutenção")
+                                st.rerun()
+                        with col_st2:
+                            if st.button("🔵 Pronto para Retirada", key=f"btn_st_pro_venda_{id_lanc_ref}", disabled=(status_venda == "Pronto")):
+                                if ids_itens_venda:
+                                    executar_query("UPDATE ItensEstoque SET Status = 'Pronto' WHERE IdItem = ANY(%s)", (ids_itens_venda,))
+                                for it in itens_venda:
+                                    adicionar_nota_os(it["id_lanc"], f"Status alterado para 'Pronto para Retirada' por {st.session_state.user_name}")
+                                st.success("Status: Pronto para Retirada")
+                                st.rerun()
+                        with col_st3:
+                            if st.button("🟢 Entregue / Finalizado", key=f"btn_st_ent_venda_{id_lanc_ref}", disabled=(status_venda == "Entregue")):
+                                if ids_itens_venda:
+                                    executar_query("UPDATE ItensEstoque SET Status = 'Entregue' WHERE IdItem = ANY(%s)", (ids_itens_venda,))
+                                for it in itens_venda:
+                                    adicionar_nota_os(it["id_lanc"], f"Status alterado para 'Entregue' por {st.session_state.user_name}")
+                                st.success("Status: Finalizado e Entregue")
+                                st.rerun()
+                                
+                        # Comunicar Cliente via WhatsApp
+                        st.write("---")
+                        st.markdown("#### 📲 Comunicar Cliente via WhatsApp")
+                        
+                        whats_limpo = re.sub(r'\D', '', whats_cli) if whats_cli else ""
+                        if whats_limpo:
+                            if not whats_limpo.startswith("55"):
+                                whats_limpo = "55" + whats_limpo
+                                
+                            primeiro_item = itens_venda[0] if itens_venda else {"marca": "", "modelo": "", "sn": "", "valor": 0.0}
+                            marca_p = primeiro_item["marca"]
+                            modelo_p = primeiro_item["modelo"]
+                            sn_os = primeiro_item["sn"] if primeiro_item["sn"] else "N/A"
+                            id_ref = codigo_venda if codigo_venda else f"Nº {id_lanc_ref}"
+                            
+                            itens_msg_list = []
+                            for it in itens_venda:
+                                sn_str = f" (S/N: {it['sn']})" if it['sn'] else ""
+                                itens_msg_list.append(f"- {it['marca']} {it['modelo']}{sn_str}: R$ {it['valor']:.2f}")
+                            itens_msg = "\n".join(itens_msg_list)
+                            
+                            msg_comprovante = (
+                                f"Olá, {nome_cli}! Aqui é da Infinity Tech. 🌟\n\n"
+                                f"Segue o detalhamento da sua compra realizada em {data_venda.strftime('%d/%m/%Y %H:%M')}:\n\n"
+                                f"{itens_msg}\n\n"
+                                f"*Valor Total: R$ {valor_total:.2f}*\n\n"
+                                f"Agradecemos a preferência! Se precisar de algo, estamos à disposição. 👍"
+                            )
+                            
+                            msg_orcamento = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O orçamento para a manutenção/serviço da sua compra {id_ref} ficou em R$ {valor_total:.2f}. Podemos prosseguir com o serviço?"
+                            msg_aguardando = f"Olá, {nome_cli}! Aqui é da Infinity Tech. A sua Ordem de Serviço/Venda {id_ref} está aguardando a chegada de peças para finalizarmos o serviço."
+                            msg_manutencao = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço/Venda {id_ref} já está em manutenção na nossa assistência técnica. Assim que estiver pronto, entraremos em contato!"
+                            msg_pronto = f"Olá, {nome_cli}! Aqui é da Infinity Tech. Temos boas notícias: o seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço/Venda {id_ref} está PRONTO! Você já pode vir retirá-lo na nossa loja. Valor final: R$ {valor_total:.2f}."
+                            msg_entregue = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço/Venda {id_ref} foi entregue com sucesso e a O.S. foi finalizada. Agradecemos a preferência!"
+                            
+                            import urllib.parse
+                            link_comp = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_comprovante)}"
+                            link_orc = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_orcamento)}"
+                            link_agu = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_aguardando)}"
+                            link_man = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_manutencao)}"
+                            link_pro = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_pronto)}"
+                            link_ent = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_entregue)}"
+                            
+                            col_w1, col_w2, col_w3 = st.columns(3)
+                            with col_w1:
+                                st.link_button("📲 Enviar: Comprovante de Compra", link_comp, use_container_width=True)
+                                st.link_button("🛠️ Enviar: Em Manutenção", link_man, use_container_width=True)
+                            with col_w2:
+                                st.link_button("💸 Enviar: Orçamento", link_orc, use_container_width=True)
+                                st.link_button("🔵 Enviar: Pronto p/ Retirada", link_pro, use_container_width=True)
+                            with col_w3:
+                                st.link_button("⏳ Enviar: Aguardando Peças", link_agu, use_container_width=True)
+                                st.link_button("🟢 Enviar: Equipamento Entregue", link_ent, use_container_width=True)
+                        else:
+                            st.warning("⚠️ Cliente não possui WhatsApp cadastrado para enviar atualizações.")
                                     
                         # Exclusão da venda (apenas ADM)
                         if st.session_state.user_role == 'adm':
