@@ -1519,7 +1519,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 cursor.execute("""
                                     INSERT INTO FluxoCaixa (IdItem, IdCliente, Tipo, Valor, Descricao)
                                     VALUES (%s, %s, 'S', %s, %s)
-                                """, (id_item_os, id_cli_os, 'S', custo_os, desc_despesa_peca))
+                                """, (id_item_os, id_cli_os, custo_os, desc_despesa_peca))
                             
                             conn.commit()
                             conn.close()
