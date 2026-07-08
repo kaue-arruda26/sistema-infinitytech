@@ -23,6 +23,13 @@ def converter_para_sp(dt):
 def obter_agora_sp():
     return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3))).replace(tzinfo=None)
 
+def formatar_brl(valor):
+    try:
+        val = float(valor)
+        return f"R$ {val:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+    except (ValueError, TypeError):
+        return f"R$ {valor}"
+
 import re
 
 # Configurações iniciais da página do Streamlit
@@ -253,11 +260,12 @@ if "ocultar_valores" not in st.session_state:
 
 def realizar_login(usuario, senha):
     try:
+        usuario_clean = usuario.strip().lower()
         user_data = executar_query("""
             SELECT Senha, Role, Nome 
             FROM Usuarios 
             WHERE Usuario = %s
-        """, (usuario,), fetch='one')
+        """, (usuario_clean,), fetch='one')
         
         if user_data and user_data[0] == senha:
             st.session_state.logged_in = True
@@ -371,53 +379,71 @@ if not st.session_state.logged_in:
 
         if total_usuarios > 0:
             # Se já existem usuários, removemos a opção de cadastro público (Segurança)
-            user_input = st.text_input("Usuário:", key="login_usuario")
-            pass_input = st.text_input("Senha:", type="password", key="login_senha")
-            
-            st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
-            if st.button("Acessar Sistema", type="primary", use_container_width=True, key="btn_login"):
-                if user_input and pass_input:
-                    realizar_login(user_input, pass_input)
-                else:
-                    st.warning("Preencha o usuário e a senha.")
+            with st.form("form_login", clear_on_submit=False):
+                user_input = st.text_input("Usuário:", key="login_usuario")
+                pass_input = st.text_input("Senha:", type="password", key="login_senha")
+                
+                st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+                submit_btn = st.form_submit_button("Acessar Sistema", type="primary", use_container_width=True)
+                
+                if submit_btn:
+                    if user_input and pass_input:
+                        realizar_login(user_input, pass_input)
+                    else:
+                        st.warning("Preencha o usuário e a senha.")
         else:
             # Caso o banco esteja totalmente vazio (primeiro acesso), permite criar o usuário ADM
             st.info("Configuração inicial: Cadastre o Administrador do sistema.")
             tab_login, tab_cadastro = st.tabs(["🔒 Entrar", "📝 Criar Conta"])
             
             with tab_login:
-                user_input = st.text_input("Usuário:", key="login_usuario")
-                pass_input = st.text_input("Senha:", type="password", key="login_senha")
-                
-                st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
-                if st.button("Acessar Sistema", type="primary", use_container_width=True, key="btn_login"):
-                    if user_input and pass_input:
-                        realizar_login(user_input, pass_input)
-                    else:
-                        st.warning("Preencha o usuário e a senha.")
+                with st.form("form_login_novo", clear_on_submit=False):
+                    user_input = st.text_input("Usuário:", key="login_usuario_novo")
+                    pass_input = st.text_input("Senha:", type="password", key="login_senha_novo")
+                    
+                    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+                    submit_btn = st.form_submit_button("Acessar Sistema", type="primary", use_container_width=True)
+                    if submit_btn:
+                        if user_input and pass_input:
+                            realizar_login(user_input, pass_input)
+                        else:
+                            st.warning("Preencha o usuário e a senha.")
                         
             with tab_cadastro:
-                cad_nome = st.text_input("Nome Completo:", placeholder="Ex: Kaue Arruda", key="cad_nome")
-                cad_usuario = st.text_input("Nome de Usuário (login):", placeholder="Ex: kaue", key="cad_usuario")
-                cad_senha = st.text_input("Senha:", type="password", key="cad_senha")
-                
-                cad_role_desc = st.radio(
-                    "Tipo de Conta (Nível de Acesso):",
-                    ["Lojista (Permissão padrão para vendas/cadastro)", "Administrador (Permissão completa - Limite: 1 ADM)"],
-                    key="cad_role"
-                )
-                
-                st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
-                if st.button("Finalizar Cadastro", type="primary", use_container_width=True, key="btn_cadastro"):
-                    if cad_nome and cad_usuario and cad_senha:
-                        cad_usuario_clean = cad_usuario.strip().lower()
-                        role_desejada = "adm" if "Administrador" in cad_role_desc else "lojista"
-                        
-                        try:
-                            if role_desejada == "adm":
-                                qtd_adm = executar_query("SELECT COUNT(*) FROM Usuarios WHERE Role = 'adm'", fetch='one')[0]
-                                if qtd_adm >= 1:
-                                    st.error("Erro: O sistema já possui um Administrador cadastrado. Não é permitido criar outra conta como ADM.")
+                with st.form("form_cadastro", clear_on_submit=False):
+                    cad_nome = st.text_input("Nome Completo:", placeholder="Ex: Kaue Arruda", key="cad_nome")
+                    cad_usuario = st.text_input("Nome de Usuário (login):", placeholder="Ex: kaue", key="cad_usuario")
+                    cad_senha = st.text_input("Senha:", type="password", key="cad_senha")
+                    
+                    cad_role_desc = st.radio(
+                        "Tipo de Conta (Nível de Acesso):",
+                        ["Lojista (Permissão padrão para vendas/cadastro)", "Administrador (Permissão completa - Limite: 1 ADM)"],
+                        key="cad_role"
+                    )
+                    
+                    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+                    submit_cad = st.form_submit_button("Finalizar Cadastro", type="primary", use_container_width=True)
+                    if submit_cad:
+                        if cad_nome and cad_usuario and cad_senha:
+                            cad_usuario_clean = cad_usuario.strip().lower()
+                            role_desejada = "adm" if "Administrador" in cad_role_desc else "lojista"
+                            
+                            try:
+                                if role_desejada == "adm":
+                                    qtd_adm = executar_query("SELECT COUNT(*) FROM Usuarios WHERE Role = 'adm'", fetch='one')[0]
+                                    if qtd_adm >= 1:
+                                        st.error("Erro: O sistema já possui um Administrador cadastrado. Não é permitido criar outra conta como ADM.")
+                                    else:
+                                        executar_query("""
+                                            INSERT INTO Usuarios (Usuario, Senha, Nome, Role)
+                                            VALUES (%s, %s, %s, %s)
+                                        """, (cad_usuario_clean, cad_senha, cad_nome, role_desejada))
+                                        st.session_state.logged_in = True
+                                        st.session_state.user_role = role_desejada
+                                        st.session_state.user_name = cad_nome
+                                        st.session_state.ocultar_valores = False
+                                        st.toast("Conta ADM criada com sucesso!", icon="👑")
+                                        st.rerun()
                                 else:
                                     executar_query("""
                                         INSERT INTO Usuarios (Usuario, Senha, Nome, Role)
@@ -427,25 +453,14 @@ if not st.session_state.logged_in:
                                     st.session_state.user_role = role_desejada
                                     st.session_state.user_name = cad_nome
                                     st.session_state.ocultar_valores = False
-                                    st.toast("Conta ADM criada com sucesso!", icon="👑")
+                                    st.toast("Conta Lojista criada com sucesso!", icon="💼")
                                     st.rerun()
-                            else:
-                                executar_query("""
-                                    INSERT INTO Usuarios (Usuario, Senha, Nome, Role)
-                                    VALUES (%s, %s, %s, %s)
-                                """, (cad_usuario_clean, cad_senha, cad_nome, role_desejada))
-                                st.session_state.logged_in = True
-                                st.session_state.user_role = role_desejada
-                                st.session_state.user_name = cad_nome
-                                st.session_state.ocultar_valores = False
-                                st.toast("Conta Lojista criada com sucesso!", icon="💼")
-                                st.rerun()
-                        except psycopg2.IntegrityError:
-                            st.error("Erro: Este nome de usuário já está sendo utilizado.")
-                        except Exception as e:
-                            st.error(f"Erro ao cadastrar conta: {e}")
-                    else:
-                        st.warning("Preencha todos os campos obrigatórios para se cadastrar.")
+                            except psycopg2.IntegrityError:
+                                st.error("Erro: Este nome de usuário já está sendo utilizado.")
+                            except Exception as e:
+                                st.error(f"Erro ao cadastrar conta: {e}")
+                        else:
+                            st.warning("Preencha todos os campos obrigatórios para se cadastrar.")
                     
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
@@ -484,7 +499,7 @@ with st.sidebar:
         st.session_state.ocultar_valores = not st.session_state.ocultar_valores
         st.rerun()
         
-    if st.button("Sair", use_container_width=True):
+    if st.button("Sair", use_container_width=True, key="btn_sair"):
         st.session_state.logged_in = False
         st.session_state.user_role = ""
         st.session_state.user_name = ""
@@ -540,7 +555,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                saldo_display = f"R$ {saldo:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                saldo_display = formatar_brl(saldo) if not st.session_state.ocultar_valores else "R$ ••••••"
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-title">Saldo Líquido</div>
@@ -606,9 +621,9 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                 soma_des = df_chart["Despesas (R$)"].sum()
                 saldo_total = soma_rec - soma_des
                 
-                soma_rec_display = f"R$ {soma_rec:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
-                soma_des_display = f"R$ {soma_des:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
-                saldo_total_display = f"R$ {saldo_total:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                soma_rec_display = formatar_brl(soma_rec) if not st.session_state.ocultar_valores else "R$ ••••••"
+                soma_des_display = formatar_brl(soma_des) if not st.session_state.ocultar_valores else "R$ ••••••"
+                saldo_total_display = formatar_brl(saldo_total) if not st.session_state.ocultar_valores else "R$ ••••••"
                 
                 col_c1, col_c2, col_c3 = st.columns(3)
                 with col_c1:
@@ -758,7 +773,7 @@ elif opcao == "👤 Clientes (CRM)":
                 estado = st.text_input("UF:", value=st.session_state.cep_data_inserido.get("uf", ""), key="cad_estado")
                 
             st.write("")
-            if st.button("Salvar Cliente", type="primary", use_container_width=True):
+            if st.button("Salvar Cliente", type="primary", use_container_width=True, key="btn_salvar_cliente_novo"):
                 if nome and whatsapp:
                     cpf_clean = re.sub(r'\D', '', cpf_input) if cpf_input else ""
                     if cpf_clean and not validar_cpf(cpf_clean):
@@ -927,7 +942,7 @@ elif opcao == "👤 Clientes (CRM)":
                         novo_est = st.text_input("UF:", value=st.session_state.cep_data_editado.get("uf", ""), key="edit_estado")
                         
                     st.write("")
-                    if st.button("Salvar Alteracoes", type="primary", use_container_width=True):
+                    if st.button("Salvar Alteracoes", type="primary", use_container_width=True, key="btn_salvar_alteracoes_cliente"):
                         if novo_nome and novo_whatsapp:
                             cpf_edit_clean = re.sub(r'\D', '', novo_documento) if novo_documento else ""
                             if cpf_edit_clean and not validar_cpf(cpf_edit_clean):
@@ -1319,7 +1334,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                         )
                     
                     # Botão para adicionar ao carrinho
-                    if st.button("➕ Adicionar ao Carrinho", use_container_width=True):
+                    if st.button("➕ Adicionar ao Carrinho", use_container_width=True, key="btn_add_ao_carrinho"):
                         # Verifica se o produto já está no carrinho
                         existente = False
                         for item in st.session_state.carrinho_venda:
@@ -1398,13 +1413,13 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                         
                         col_actions1, col_actions2 = st.columns(2)
                         with col_actions1:
-                            if st.button("❌ Limpar Carrinho", use_container_width=True):
+                            if st.button("❌ Limpar Carrinho", use_container_width=True, key="btn_limpar_carrinho_venda"):
                                 st.session_state.carrinho_venda = []
                                 st.toast("Carrinho limpo!", icon="🧹")
                                 st.rerun()
                                 
                         with col_actions2:
-                            if st.button("🛒 Confirmar e Finalizar Venda", type="primary", use_container_width=True):
+                            if st.button("🛒 Confirmar e Finalizar Venda", type="primary", use_container_width=True, key="btn_finalizar_carrinho_venda"):
                                 try:
                                     conn = abrir_conexao()
                                     cursor = conn.cursor()
@@ -1469,7 +1484,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                 sn_equipamento = st.text_input("Número de Série do Equipamento (Opcional):")
                 defeito_os = st.text_area("Defeito / Relato do Cliente / Diagnóstico Inicial:")
                 
-                if st.button("Abrir Ordem de Serviço", type="primary"):
+                if st.button("Abrir Ordem de Serviço", type="primary", key="btn_abrir_os_nova"):
                     if marca_equipamento and modelo_equipamento:
                         try:
                             conn = abrir_conexao()
@@ -2283,9 +2298,9 @@ elif opcao == "📊 Financeiro & Caixa":
                 
                 # Resumo financeiro do período
                 st.write("---")
-                total_e_display = f"R$ {total_e:.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
-                total_s_display = f"R$ {total_s:.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
-                saldo_p_display = f"R$ {total_e - total_s:.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+                total_e_display = formatar_brl(total_e) if not st.session_state.ocultar_valores else "R$ ••••••"
+                total_s_display = formatar_brl(total_s) if not st.session_state.ocultar_valores else "R$ ••••••"
+                saldo_p_display = formatar_brl(total_e - total_s) if not st.session_state.ocultar_valores else "R$ ••••••"
                 
                 col_res1, col_res2, col_res3 = st.columns(3)
                 with col_res1:
@@ -2311,7 +2326,7 @@ elif opcao == "📊 Financeiro & Caixa":
             
             dic_selecao_fin = {}
             for c in caixa_dados:
-                valor_display_fin = f"R$ {c[2]:.2f}" if not st.session_state.ocultar_valores else "••••"
+                valor_display_fin = formatar_brl(c[2]) if not st.session_state.ocultar_valores else "••••"
                 dic_selecao_fin[f"Lançamento Nº {c[0]} - {c[1]} - {valor_display_fin}"] = c
             lanc_selecionado_str = st.selectbox("Selecione o Lançamento para Modificar:", list(dic_selecao_fin.keys()))
             
@@ -2373,9 +2388,9 @@ elif opcao == "📊 Financeiro & Caixa":
             """, (primeiro_dia_mes,), fetch='one')[0]
 
             col_d1, col_d2, col_d3 = st.columns(3)
-            sum_pendente_display = f"R$ {sum_pendente:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
-            sum_vencido_display = f"R$ {sum_vencido:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
-            sum_pago_mes_display = f"R$ {sum_pago_mes:,.2f}" if not st.session_state.ocultar_valores else "R$ ••••••"
+            sum_pendente_display = formatar_brl(sum_pendente) if not st.session_state.ocultar_valores else "R$ ••••••"
+            sum_vencido_display = formatar_brl(sum_vencido) if not st.session_state.ocultar_valores else "R$ ••••••"
+            sum_pago_mes_display = formatar_brl(sum_pago_mes) if not st.session_state.ocultar_valores else "R$ ••••••"
             
             with col_d1:
                 st.markdown(f"""
@@ -2524,7 +2539,7 @@ elif opcao == "📊 Financeiro & Caixa":
                     for item in dados_dividas:
                         id_d, credor_d, desc_d, valor_d, _, _, stat_d, _, _, _ = item
                         status_ind = "Pendente" if stat_d == 'Pendente' else "Paga"
-                        valor_display_sel = f"R$ {valor_d:.2f}" if not st.session_state.ocultar_valores else "••••"
+                        valor_display_sel = formatar_brl(valor_d) if not st.session_state.ocultar_valores else "••••"
                         lista_select_dividas[f"ID {id_d} - {credor_d} - {valor_display_sel} ({status_ind})"] = item
                         
                     divida_selecionada_str = st.selectbox("Selecione a Dívida para atualizar:", list(lista_select_dividas.keys()))
@@ -2537,7 +2552,7 @@ elif opcao == "📊 Financeiro & Caixa":
                         with col_ad1:
                             st.markdown(f"**Credor:** {credor_d}")
                             st.markdown(f"**Item/Descrição:** {desc_d}")
-                            valor_display_det = f"R$ {valor_d:.2f}" if not st.session_state.ocultar_valores else "••••"
+                            valor_display_det = formatar_brl(valor_d) if not st.session_state.ocultar_valores else "••••"
                             st.markdown(f"**Valor:** {valor_display_det}")
                             st.markdown(f"**Status Atual:** {stat_d}")
                             if obs_d:
@@ -2681,7 +2696,7 @@ elif opcao == "👥 Contas & Acessos":
                         st.warning("Você não pode excluir a sua própria conta ativa ou a conta administradora principal.")
                     else:
                         confirmar_usr_del = st.checkbox(f"Confirmo que desejo revogar o acesso de '{nome_usr}'.")
-                        if st.button("Excluir Usuário", type="primary", disabled=not confirmar_usr_del):
+                        if st.button("Excluir Usuário", type="primary", disabled=not confirmar_usr_del, key="btn_excluir_usuario_remover"):
                             try:
                                 executar_query("DELETE FROM Usuarios WHERE IdUsuario = %s", (id_usr,))
                                 st.success(f"Acesso de '{nome_usr}' revogado com sucesso!")
