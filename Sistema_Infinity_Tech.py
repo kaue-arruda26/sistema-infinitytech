@@ -140,6 +140,43 @@ def validar_cpf(cpf):
         
     return True
 
+def validar_cnpj(cnpj):
+    # Remove caracteres nao numericos
+    cnpj = re.sub(r'\D', '', cnpj)
+    if len(cnpj) != 14:
+        return False
+    # CNPJs com todos os digitos repetidos sao invalidos
+    if cnpj in [d * 14 for d in "0123456789"]:
+        return False
+        
+    # Valida primeiro digito verificador
+    mult1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma = sum(int(cnpj[i]) * mult1[i] for i in range(12))
+    resto = soma % 11
+    digito1 = 0 if resto < 2 else 11 - resto
+    if int(cnpj[12]) != digito1:
+        return False
+        
+    # Valida segundo digito verificador
+    mult2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma = sum(int(cnpj[i]) * mult2[i] for i in range(13))
+    resto = soma % 11
+    digito2 = 0 if resto < 2 else 11 - resto
+    if int(cnpj[13]) != digito2:
+        return False
+        
+    return True
+
+def validar_documento(doc):
+    if not doc:
+        return False
+    doc_clean = re.sub(r'\D', '', doc)
+    if len(doc_clean) == 11:
+        return validar_cpf(doc_clean)
+    elif len(doc_clean) == 14:
+        return validar_cnpj(doc_clean)
+    return False
+
 def buscar_cep(cep):
     # Remove caracteres nao numericos
     cep_clean = re.sub(r'\D', '', cep)
@@ -732,7 +769,7 @@ elif opcao == "👤 Clientes (CRM)":
                 nome = st.text_input("Nome Completo:", key="cad_nome")
                 whatsapp = st.text_input("WhatsApp (com DDD):", placeholder="Ex: 11988887777", key="cad_whatsapp")
             with col_p2:
-                cpf_input = st.text_input("CPF (somente numeros):", placeholder="Ex: 12345678909", max_chars=11, key="cad_cpf")
+                cpf_input = st.text_input("CPF ou CNPJ (somente numeros):", placeholder="Ex: 12345678909 ou 12345678000195", max_chars=14, key="cad_cpf")
                 email = st.text_input("E-mail:", key="cad_email")
             
             st.markdown("##### Endereço Residencial")
@@ -776,8 +813,8 @@ elif opcao == "👤 Clientes (CRM)":
             if st.button("Salvar Cliente", type="primary", use_container_width=True, key="btn_salvar_cliente_novo"):
                 if nome and whatsapp:
                     cpf_clean = re.sub(r'\D', '', cpf_input) if cpf_input else ""
-                    if cpf_clean and not validar_cpf(cpf_clean):
-                        st.error("Erro: O CPF digitado é inválido!")
+                    if cpf_clean and not validar_documento(cpf_clean):
+                        st.error("Erro: O CPF/CNPJ digitado é inválido!")
                     else:
                         try:
                             executar_query("""
@@ -803,9 +840,9 @@ elif opcao == "👤 Clientes (CRM)":
                             if "whatsapp" in err_msg:
                                 st.error("Erro: O WhatsApp digitado já está cadastrado para outro cliente.")
                             elif "documento" in err_msg:
-                                st.error("Erro: O CPF digitado já está cadastrado para outro cliente.")
+                                st.error("Erro: O CPF/CNPJ digitado já está cadastrado para outro cliente.")
                             else:
-                                st.error("Erro: WhatsApp ou CPF já cadastrado no sistema.")
+                                st.error("Erro: WhatsApp ou CPF/CNPJ já cadastrado no sistema.")
                         except Exception as e:
                             st.error(f"Erro ao salvar: {e}")
                 else:
@@ -813,7 +850,7 @@ elif opcao == "👤 Clientes (CRM)":
                         
     with aba_lista:
         st.header("Lista de Clientes")
-        termo_busca = st.text_input("Buscar cliente por Nome, WhatsApp, CPF ou CEP:")
+        termo_busca = st.text_input("Buscar cliente por Nome, WhatsApp, CPF/CNPJ ou CEP:")
         
         # Query com filtro atualizada para trazer todos os campos
         query_busca = """
@@ -830,13 +867,13 @@ elif opcao == "👤 Clientes (CRM)":
             tabela_dados = []
             for c in clientes:
                 tabela_dados.append([c[0], c[1], c[2], c[3] if c[3] else "---", c[4] if c[4] else "---", f"{c[6] if c[6] else ''}, {c[7] if c[7] else ''} - {c[10] if c[10] else ''}"])
-            df_clientes = pd.DataFrame(tabela_dados, columns=["ID", "Nome", "WhatsApp", "E-mail", "CPF", "Endereco"])
+            df_clientes = pd.DataFrame(tabela_dados, columns=["ID", "Nome", "WhatsApp", "E-mail", "CPF/CNPJ", "Endereco"])
             st.dataframe(df_clientes, use_container_width=True, hide_index=True)
             
             # Botão de exportação de Clientes
             df_export = df_clientes.copy()
             df_export["WhatsApp"] = df_export["WhatsApp"].apply(lambda x: f'="{x}"' if x and x != "---" else x)
-            df_export["CPF"] = df_export["CPF"].apply(lambda x: f'="{x}"' if x and x != "---" else x)
+            df_export["CPF/CNPJ"] = df_export["CPF/CNPJ"].apply(lambda x: f'="{x}"' if x and x != "---" else x)
             csv_clientes = df_export.to_csv(index=False, sep=';').encode('utf-8-sig')
             st.download_button(
                 label="📥 Exportar Clientes para Excel (CSV)",
@@ -903,7 +940,7 @@ elif opcao == "👤 Clientes (CRM)":
                         novo_nome = st.text_input("Nome Completo:", value=nome_cli, key="edit_nome")
                         novo_whatsapp = st.text_input("WhatsApp:", value=wa_cli, key="edit_whatsapp")
                     with col_pe2:
-                        novo_documento = st.text_input("CPF:", value=doc_cli if doc_cli else "", max_chars=11, key="edit_cpf")
+                        novo_documento = st.text_input("CPF ou CNPJ (somente numeros):", value=doc_cli if doc_cli else "", max_chars=14, key="edit_cpf")
                         novo_email = st.text_input("E-mail:", value=email_cli if email_cli else "", key="edit_email")
                         
                     st.markdown("##### Endereco Residencial")
@@ -945,8 +982,8 @@ elif opcao == "👤 Clientes (CRM)":
                     if st.button("Salvar Alteracoes", type="primary", use_container_width=True, key="btn_salvar_alteracoes_cliente"):
                         if novo_nome and novo_whatsapp:
                             cpf_edit_clean = re.sub(r'\D', '', novo_documento) if novo_documento else ""
-                            if cpf_edit_clean and not validar_cpf(cpf_edit_clean):
-                                st.error("Erro: O CPF digitado e invalido!")
+                            if cpf_edit_clean and not validar_documento(cpf_edit_clean):
+                                st.error("Erro: O CPF/CNPJ digitado é inválido!")
                             else:
                                 try:
                                     executar_query("""
@@ -969,9 +1006,9 @@ elif opcao == "👤 Clientes (CRM)":
                                     if "whatsapp" in err_msg:
                                         st.error("Erro: O WhatsApp digitado já está cadastrado para outro cliente.")
                                     elif "documento" in err_msg:
-                                        st.error("Erro: O CPF digitado já está cadastrado para outro cliente.")
+                                        st.error("Erro: O CPF/CNPJ digitado já está cadastrado para outro cliente.")
                                     else:
-                                        st.error("Erro: WhatsApp ou CPF já cadastrado no sistema.")
+                                        st.error("Erro: WhatsApp ou CPF/CNPJ já cadastrado no sistema.")
                                 except Exception as e:
                                     st.error(f"Erro ao atualizar: {e}")
                         else:
