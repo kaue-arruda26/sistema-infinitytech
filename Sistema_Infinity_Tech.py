@@ -816,25 +816,14 @@ elif opcao == "👤 Clientes (CRM)":
                     if cpf_clean and not validar_documento(cpf_clean):
                         st.error("Erro: O CPF/CNPJ digitado é inválido!")
                     else:
+                        salvou_com_sucesso = False
                         try:
                             executar_query("""
                                 INSERT INTO Clientes (Nome, WhatsApp, Email, Documento, CEP, Logradouro, Numero, Complemento, Bairro, Cidade, Estado)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """, (nome, whatsapp, email if email else None, cpf_clean if cpf_clean else None, 
                                   cep_clean if cep_clean else None, logradouro, numero, complemento, bairro, cidade, estado))
-                            
-                            # Limpa os campos do formulário redefinindo as chaves no session_state
-                            st.session_state.ultimo_cep_inserido = ""
-                            st.session_state.cep_data_inserido = {"logradouro": "", "bairro": "", "localidade": "", "uf": ""}
-                            st.session_state.cep_key_counter += 1
-                            
-                            for k in ["cad_nome", "cad_whatsapp", "cad_cpf", "cad_email", "cad_logradouro", "cad_numero", "cad_complemento", "cad_bairro", "cad_cidade", "cad_estado"]:
-                                if k in st.session_state:
-                                    st.session_state[k] = ""
-                                    
-                            st.success(f"Cliente '{nome}' cadastrado com sucesso!")
-                            st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon="🎉")
-                            st.rerun()
+                            salvou_com_sucesso = True
                         except psycopg2.IntegrityError as e:
                             err_msg = str(e)
                             if "whatsapp" in err_msg:
@@ -845,6 +834,23 @@ elif opcao == "👤 Clientes (CRM)":
                                 st.error("Erro: WhatsApp ou CPF/CNPJ já cadastrado no sistema.")
                         except Exception as e:
                             st.error(f"Erro ao salvar: {e}")
+                            
+                        if salvou_com_sucesso:
+                            # Limpa os campos do formulário redefinindo as chaves no session_state
+                            st.session_state.ultimo_cep_inserido = ""
+                            st.session_state.cep_data_inserido = {"logradouro": "", "bairro": "", "localidade": "", "uf": ""}
+                            st.session_state.cep_key_counter += 1
+                            
+                            for k in ["cad_nome", "cad_whatsapp", "cad_cpf", "cad_email", "cad_logradouro", "cad_numero", "cad_complemento", "cad_bairro", "cad_cidade", "cad_estado"]:
+                                if k in st.session_state:
+                                    try:
+                                        st.session_state[k] = ""
+                                    except Exception:
+                                        pass
+                                    
+                            st.success(f"Cliente '{nome}' cadastrado com sucesso!")
+                            st.toast(f"Cliente '{nome}' cadastrado com sucesso!", icon="🎉")
+                            st.rerun()
                 else:
                     st.warning("Nome e WhatsApp são obrigatórios.")
                         
@@ -985,6 +991,7 @@ elif opcao == "👤 Clientes (CRM)":
                             if cpf_edit_clean and not validar_documento(cpf_edit_clean):
                                 st.error("Erro: O CPF/CNPJ digitado é inválido!")
                             else:
+                                atualizou_com_sucesso = False
                                 try:
                                     executar_query("""
                                         UPDATE Clientes 
@@ -994,13 +1001,7 @@ elif opcao == "👤 Clientes (CRM)":
                                         WHERE IdCliente = %s
                                     """, (novo_nome, cpf_edit_clean if cpf_edit_clean else None, novo_whatsapp, novo_email if novo_email else None,
                                           cep_edit_clean if cep_edit_clean else None, novo_log, novo_num, novo_comp, novo_bai, novo_cid, novo_est, id_cli))
-                                    
-                                    # Limpa estado de edicao
-                                    if "cliente_selecionado_id" in st.session_state:
-                                        del st.session_state.cliente_selecionado_id
-                                        
-                                    st.success(f"Cadastro de '{novo_nome}' atualizado com sucesso!")
-                                    st.rerun()
+                                    atualizou_com_sucesso = True
                                 except psycopg2.IntegrityError as e:
                                     err_msg = str(e)
                                     if "whatsapp" in err_msg:
@@ -1011,6 +1012,17 @@ elif opcao == "👤 Clientes (CRM)":
                                         st.error("Erro: WhatsApp ou CPF/CNPJ já cadastrado no sistema.")
                                 except Exception as e:
                                     st.error(f"Erro ao atualizar: {e}")
+                                    
+                                if atualizou_com_sucesso:
+                                    # Limpa estado de edicao
+                                    if "cliente_selecionado_id" in st.session_state:
+                                        try:
+                                            del st.session_state.cliente_selecionado_id
+                                        except Exception:
+                                            pass
+                                        
+                                    st.success(f"Cadastro de '{novo_nome}' atualizado com sucesso!")
+                                    st.rerun()
                         else:
                             st.warning("Nome e WhatsApp sao obrigatorios.")
                     
