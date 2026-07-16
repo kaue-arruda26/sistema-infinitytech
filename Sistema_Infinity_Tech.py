@@ -568,7 +568,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
 
         # Busca quantidade de O.S. ativas (Manutencao ou Pronto)
         total_os_ativas = executar_query("""
-            SELECT COUNT(*) FROM ItensEstoque WHERE Status IN ('Manutencao', 'Pronto')
+            SELECT COUNT(*) FROM ItensEstoque WHERE Status IN ('Orcamento', 'Manutencao', 'Pronto', 'Recusado')
         """, fetch='one')[0]
 
         # Busca quantidade de produtos com estoque baixo (menor ou igual a 1 unidade disponível), desconsiderando aparelhos de O.S.
@@ -580,7 +580,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
               AND p.IdProduto NOT IN (
                   SELECT DISTINCT IdProduto 
                   FROM ItensEstoque 
-                  WHERE Status IN ('Manutencao', 'Pronto', 'Entregue')
+                  WHERE Status IN ('Orcamento', 'Manutencao', 'Pronto', 'Recusado', 'Entregue')
               )
             GROUP BY p.IdProduto, p.Marca, p.Modelo
             HAVING COUNT(i.IdItem) <= 1
@@ -693,7 +693,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                     JOIN Clientes c ON f.IdCliente = c.IdCliente
                     JOIN ItensEstoque i ON f.IdItem = i.IdItem
                     JOIN Produtos p ON i.IdProduto = p.IdProduto
-                    WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%%'
+                    WHERE i.Status IN ('Orcamento', 'Manutencao', 'Pronto', 'Recusado') AND f.Descricao LIKE '[ASSISTENCIA]%%'
                     ORDER BY f.IdLancamento DESC LIMIT 5
                 """, fetch='all')
                 if os_ativas:
@@ -730,7 +730,7 @@ if opcao == "🏠 Painel Geral (Dashboard)":
                 JOIN Clientes c ON f.IdCliente = c.IdCliente
                 JOIN ItensEstoque i ON f.IdItem = i.IdItem
                 JOIN Produtos p ON i.IdProduto = p.IdProduto
-                WHERE i.Status IN ('Manutencao', 'Pronto') AND f.Descricao LIKE '[ASSISTENCIA]%%'
+                WHERE i.Status IN ('Orcamento', 'Manutencao', 'Pronto', 'Recusado') AND f.Descricao LIKE '[ASSISTENCIA]%%'
                 ORDER BY f.IdLancamento DESC LIMIT 5
             """, fetch='all')
             if os_ativas:
@@ -1104,12 +1104,12 @@ elif opcao == "📦 Produtos & Estoque":
         query_produtos = """
             SELECT p.IdProduto, p.Marca, p.Modelo, p.CustoProduto, p.ValorMinimo, p.ValorVenda,
                    COUNT(CASE WHEN LOWER(i.Status) = 'disponivel' THEN 1 END) as disponivel,
-                   COUNT(CASE WHEN LOWER(i.Status) NOT IN ('manutencao', 'pronto', 'entregue') THEN 1 END) as total
+                   COUNT(CASE WHEN LOWER(i.Status) NOT IN ('orcamento', 'manutencao', 'pronto', 'recusado', 'entregue') THEN 1 END) as total
             FROM Produtos p
             LEFT JOIN ItensEstoque i ON p.IdProduto = i.IdProduto
             WHERE p.Ativo = true AND (p.Marca ILIKE %s OR p.Modelo ILIKE %s)
             GROUP BY p.IdProduto, p.Marca, p.Modelo, p.CustoProduto, p.ValorMinimo, p.ValorVenda
-            HAVING (COUNT(i.IdItem) = 0 OR COUNT(CASE WHEN LOWER(i.Status) NOT IN ('manutencao', 'pronto', 'entregue') THEN 1 END) > 0)
+            HAVING (COUNT(i.IdItem) = 0 OR COUNT(CASE WHEN LOWER(i.Status) NOT IN ('orcamento', 'manutencao', 'pronto', 'recusado', 'entregue') THEN 1 END) > 0)
             ORDER BY p.Marca, p.Modelo
         """
         param_busca = f"%{termo_busca}%"
@@ -1221,7 +1221,7 @@ elif opcao == "📦 Produtos & Estoque":
                         itens_fisicos = executar_query("""
                             SELECT IdItem, NumeroSerie, Status 
                             FROM ItensEstoque 
-                            WHERE IdProduto = %s AND LOWER(Status) NOT IN ('manutencao', 'pronto', 'entregue')
+                            WHERE IdProduto = %s AND LOWER(Status) NOT IN ('orcamento', 'manutencao', 'pronto', 'recusado', 'entregue')
                             ORDER BY IdItem ASC
                         """, (id_p,), fetch='all')
                         
@@ -1242,8 +1242,8 @@ elif opcao == "📦 Produtos & Estoque":
                                 with col_i1:
                                     novo_status_it = st.selectbox(
                                         "Novo Status da Unidade:",
-                                        ["Disponivel", "Vendido", "Manutencao", "Pronto", "Entregue"],
-                                        index=["Disponivel", "Vendido", "Manutencao", "Pronto", "Entregue"].index(status_it)
+                                        ["Disponivel", "Vendido", "Orcamento", "Manutencao", "Pronto", "Recusado", "Entregue"],
+                                        index=["Disponivel", "Vendido", "Orcamento", "Manutencao", "Pronto", "Recusado", "Entregue"].index(status_it)
                                     )
                                     if st.button("Atualizar Status", key=f"btn_status_item_{id_item_it}"):
                                         try:
@@ -1297,7 +1297,7 @@ elif opcao == "📦 Produtos & Estoque":
                         itens_fisicos = executar_query("""
                             SELECT IdItem, NumeroSerie, Status 
                             FROM ItensEstoque 
-                            WHERE IdProduto = %s AND LOWER(Status) NOT IN ('manutencao', 'pronto', 'entregue')
+                            WHERE IdProduto = %s AND LOWER(Status) NOT IN ('orcamento', 'manutencao', 'pronto', 'recusado', 'entregue')
                             ORDER BY IdItem ASC
                         """, (id_p,), fetch='all')
                         
@@ -1526,16 +1526,25 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                 
                 col_val1, col_val2 = st.columns(2)
                 with col_val1:
-                    valor_os = st.number_input("Preço Inicial/Estimado do Conserto (R$):", value=0.0, min_value=0.0)
+                    valor_os = st.number_input("Preço Estimado do Conserto (R$):", value=0.0, min_value=0.0)
                 with col_val2:
                     custo_os = st.number_input("Custo Inicial da(s) Peça(s) (R$):", value=0.0, min_value=0.0)
                 
-                sn_equipamento = st.text_input("Número de Série do Equipamento (Opcional):")
+                col_opt1, col_opt2 = st.columns(2)
+                with col_opt1:
+                    sn_equipamento = st.text_input("Número de Série do Equipamento (Opcional):")
+                with col_opt2:
+                    tipo_os_inicial = st.selectbox(
+                        "Tipo de Entrada:",
+                        ["📋 Apenas Orçamento (Aparelho em Análise)", "🛠️ O.S. Aprovada (Iniciar Manutenção)"]
+                    )
+                
                 defeito_os = st.text_area("Defeito / Relato do Cliente / Diagnóstico Inicial:")
                 
                 if st.button("Abrir Ordem de Serviço", type="primary", key="btn_abrir_os_nova"):
                     if marca_equipamento and modelo_equipamento:
                         try:
+                            status_inicial = 'Orcamento' if "Orçamento" in tipo_os_inicial else 'Manutencao'
                             conn = abrir_conexao()
                             cursor = conn.cursor()
                             
@@ -1547,19 +1556,20 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             """, (marca_equipamento, modelo_os_com_tipo, custo_os, valor_os))
                             id_prod_os = cursor.fetchone()[0]
                             
-                            # Cadastra o item com status 'Manutencao'
+                            # Cadastra o item com o status inicial correspondente
                             sn_final_os = sn_equipamento if sn_equipamento.strip() else f"OS-{id_prod_os}"
                             cursor.execute("""
                                 INSERT INTO ItensEstoque (IdProduto, NumeroSerie, Status)
-                                VALUES (%s, %s, 'Manutencao') RETURNING IdItem;
-                            """, (id_prod_os, sn_final_os))
+                                VALUES (%s, %s, %s) RETURNING IdItem;
+                            """, (id_prod_os, sn_final_os, status_inicial))
                             id_item_os = cursor.fetchone()[0]
                             
                             # Cria a O.S. no Caixa/Lançamentos
+                            desc_prefixo = "[ASSISTENCIA][ORCAMENTO]" if status_inicial == 'Orcamento' else "[ASSISTENCIA]"
                             cursor.execute("""
                                 INSERT INTO FluxoCaixa (IdItem, IdCliente, Tipo, Valor, Descricao)
                                 VALUES (%s, %s, 'E', %s, %s) RETURNING IdLancamento;
-                            """, (id_item_os, id_cli_os, valor_os, f"[ASSISTENCIA] - {defeito_os}"))
+                            """, (id_item_os, id_cli_os, valor_os, f"{desc_prefixo} - {defeito_os}"))
                             id_lancamento_os = cursor.fetchone()[0]
                             
                             # Se houver custo inicial, lança a saída correspondente no caixa (despesa)
@@ -1866,21 +1876,33 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                         
                         st.write("---")
                         st.markdown("#### ⚙️ Controle de Status da Assistência")
-                        col_st1, col_st2, col_st3 = st.columns(3)
+                        col_st1, col_st2, col_st3, col_st4, col_st5 = st.columns(5)
                         with col_st1:
-                            if st.button("🛠️ Em Manutenção", key=f"btn_st_man_{id_lanc_os}", disabled=(status_os == "Manutencao")):
+                            if st.button("📋 Em Orçamento", key=f"btn_st_orc_{id_lanc_os}", disabled=(status_os == "Orcamento"), use_container_width=True):
+                                executar_query("UPDATE ItensEstoque SET Status = 'Orcamento' WHERE IdItem = %s", (id_item_os,))
+                                adicionar_nota_os(id_lanc_os, f"Status alterado para 'Em Orçamento' por {st.session_state.user_name}")
+                                st.success("Status: Em Orçamento")
+                                st.rerun()
+                        with col_st2:
+                            if st.button("🛠️ Em Manutenção", key=f"btn_st_man_{id_lanc_os}", disabled=(status_os == "Manutencao"), use_container_width=True):
                                 executar_query("UPDATE ItensEstoque SET Status = 'Manutencao' WHERE IdItem = %s", (id_item_os,))
                                 adicionar_nota_os(id_lanc_os, f"Status alterado para 'Em Manutenção' por {st.session_state.user_name}")
                                 st.success("Status: Em Manutenção")
                                 st.rerun()
-                        with col_st2:
-                            if st.button("🔵 Pronto para Retirada", key=f"btn_st_pro_{id_lanc_os}", disabled=(status_os == "Pronto")):
+                        with col_st3:
+                            if st.button("🔵 Pronto p/ Retirada", key=f"btn_st_pro_{id_lanc_os}", disabled=(status_os == "Pronto"), use_container_width=True):
                                 executar_query("UPDATE ItensEstoque SET Status = 'Pronto' WHERE IdItem = %s", (id_item_os,))
                                 adicionar_nota_os(id_lanc_os, f"Status alterado para 'Pronto para Retirada' por {st.session_state.user_name}")
                                 st.success("Status: Pronto para Retirada")
                                 st.rerun()
-                        with col_st3:
-                            if st.button("🟢 Entregue / Finalizado", key=f"btn_st_ent_{id_lanc_os}", disabled=(status_os == "Entregue")):
+                        with col_st4:
+                            if st.button("❌ Recusado", key=f"btn_st_rec_{id_lanc_os}", disabled=(status_os == "Recusado"), use_container_width=True):
+                                executar_query("UPDATE ItensEstoque SET Status = 'Recusado' WHERE IdItem = %s", (id_item_os,))
+                                adicionar_nota_os(id_lanc_os, f"Status alterado para 'Orçamento Recusado' por {st.session_state.user_name}")
+                                st.success("Status: Orçamento Recusado")
+                                st.rerun()
+                        with col_st5:
+                            if st.button("🟢 Entregue", key=f"btn_st_ent_{id_lanc_os}", disabled=(status_os == "Entregue"), use_container_width=True):
                                 executar_query("UPDATE ItensEstoque SET Status = 'Entregue' WHERE IdItem = %s", (id_item_os,))
                                 adicionar_nota_os(id_lanc_os, f"Status alterado para 'Entregue' por {st.session_state.user_name}")
                                 st.success("Status: Finalizado e Entregue")
@@ -1896,6 +1918,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 
                             msg_abertura = f"Olá, {nome_cli}! Aqui é da Infinity Tech. Recebemos o seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) para análise. A sua Ordem de Serviço é a Nº {id_lanc_os}. Assim que realizarmos o diagnóstico, entraremos em contato!"
                             msg_orcamento = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O orçamento para o conserto do seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da OS Nº {id_lanc_os} ficou em R$ {valor_os:.2f}. Podemos prosseguir com o serviço?"
+                            msg_recusado = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O orçamento para o conserto do seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da OS Nº {id_lanc_os} foi recusado. O seu aparelho já está pronto para devolução/retirada na nossa loja."
                             msg_aguardando = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da OS Nº {id_lanc_os} está aguardando a chegada de peças para finalizarmos a manutenção."
                             msg_manutencao = f"Olá, {nome_cli}! Aqui é da Infinity Tech. O seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} já está em manutenção na nossa assistência técnica. Assim que estiver pronto, entraremos em contato!"
                             msg_pronto = f"Olá, {nome_cli}! Aqui é da Infinity Tech. Temos boas notícias: o seu equipamento {marca_p} {modelo_p} (Serial: {sn_os}) da Ordem de Serviço Nº {id_lanc_os} está PRONTO! Você já pode vir retirá-lo na nossa loja. Valor final: R$ {valor_os:.2f}."
@@ -1904,21 +1927,24 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                             import urllib.parse
                             link_abe = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_abertura)}"
                             link_orc = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_orcamento)}"
+                            link_rec = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_recusado)}"
                             link_agu = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_aguardando)}"
                             link_man = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_manutencao)}"
                             link_pro = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_pronto)}"
                             link_ent = f"https://wa.me/{whats_limpo}?text={urllib.parse.quote(msg_entregue)}"
                             
-                            col_w1, col_w2, col_w3 = st.columns(3)
+                            col_w1, col_w2, col_w3, col_w4 = st.columns(4)
                             with col_w1:
-                                st.link_button("📝 Enviar: Abertura / Recebido", link_abe, use_container_width=True)
+                                st.link_button("📝 Enviar: Recebido", link_abe, use_container_width=True)
                                 st.link_button("🛠️ Enviar: Em Manutenção", link_man, use_container_width=True)
                             with col_w2:
                                 st.link_button("💸 Enviar: Orçamento", link_orc, use_container_width=True)
-                                st.link_button("🔵 Enviar: Pronto p/ Retirada", link_pro, use_container_width=True)
+                                st.link_button("❌ Enviar: Recusado/Devolver", link_rec, use_container_width=True)
                             with col_w3:
                                 st.link_button("⏳ Enviar: Aguardando Peças", link_agu, use_container_width=True)
-                                st.link_button("🟢 Enviar: Equipamento Entregue", link_ent, use_container_width=True)
+                                st.link_button("🔵 Enviar: Pronto p/ Retirada", link_pro, use_container_width=True)
+                            with col_w4:
+                                st.link_button("🟢 Enviar: Entregue", link_ent, use_container_width=True)
                         else:
                             st.warning("⚠️ Cliente não possui WhatsApp cadastrado para enviar atualizações.")
                             
@@ -1937,7 +1963,24 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     st.error(f"Erro ao excluir O.S.: {e}")
                                     
                     with col_os_d:
-                        st.markdown("#### 🖨️ Comprovante de Balcão")
+                        # Define título, texto de valor e termos com base no status
+                        if status_os.lower() == "orcamento":
+                            titulo_doc = "COMPROVANTE DE ENTRADA (ORÇAMENTO)"
+                            texto_valor = "VALOR ESTIMADO: SOB ANÁLISE / ORÇAMENTO"
+                            termo_titulo = "TERMOS DE RECEBIMENTO:"
+                            termo_texto = "Este comprovante atesta que o equipamento acima foi deixado para analise tecnica e elaboracao de orcamento. O cliente deve apresentar este papel para a retirada do equipamento, seja o orcamento aprovado ou recusado."
+                        elif status_os.lower() == "recusado":
+                            titulo_doc = "COMPROVANTE DE DEVOLUÇÃO (RECUSADO)"
+                            texto_valor = "VALOR TOTAL: R$ 0,00 (Orçamento Recusado)"
+                            termo_titulo = "TERMOS DE RETIRADA:"
+                            termo_texto = "O cliente declara ter retirado o equipamento nas mesmas condicoes de entrada, sem a realizacao de servicos devido a nao aprovacao do orcamento."
+                        else:
+                            titulo_doc = f"COMPROVANTE O.S. Nº {id_lanc_os}"
+                            texto_valor = f"VALOR BRUTO: R$ {valor_os:.2f}"
+                            termo_titulo = "TERMOS DE GARANTIA:"
+                            termo_texto = "Garantia de 90 dias sobre a mao de obra e pecas trocadas a partir da data de retirada/entrega, cobrindo apenas defeitos associados ao servico realizado."
+
+                        st.markdown("#### 🖨️ Impressão de Comprovante")
                         html_recibo = f"""
                         <html>
                         <head>
@@ -1960,7 +2003,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                     Whats: (11) 97086-8573<br>
                                     ----------------------------
                                 </div>
-                                <strong>COMPROVANTE O.S. NO {id_lanc_os}</strong><br>
+                                <strong>{titulo_doc}</strong><br>
                                 Data: {data_os.strftime('%d/%m/%Y %H:%M')}<br>
                                 <div class="linha"></div>
                                 <strong>CLIENTE:</strong> {nome_cli}<br>
@@ -1971,11 +2014,11 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                                 <strong>STATUS:</strong> {status_os.upper()}<br>
                                 <strong>DETALHES:</strong> {re.sub(r'\[PAGAMENTO:\s*[^\]]+\]\s*-?\s*', '', desc_os.split('--- NOTAS TÉCNICAS ---')[0].strip())}<br>
                                 <div class="linha"></div>
-                                <strong>VALOR BRUTO: R$ {valor_os:.2f}</strong><br>
+                                <strong>{texto_valor}</strong><br>
                                 <div class="linha"></div>
                                 <div style='font-size: 9px; text-align: justify; margin-top: 5px; line-height: 1.1;'>
-                                    <strong>TERMOS DE GARANTIA:</strong><br>
-                                    Garantia de 90 dias sobre a mao de obra e pecas trocadas a partir da data de retirada/entrega, cobrindo apenas defeitos associados ao servico realizado.
+                                    <strong>{termo_titulo}</strong><br>
+                                    {termo_texto}
                                 </div>
                                 <div class="espaco-assinatura">___________________________<br>Assinatura do Cliente</div>
                                 <div class="espaco-assinatura">___________________________<br>Assinatura InfinityTech</div>
@@ -1984,7 +2027,7 @@ elif opcao == "📝 Ordens de Serviço (O.S.)":
                         </body>
                         </html>
                         """
-                        if st.button("🖨️ Imprimir Cupom de Balcão", key=f"btn_print_{id_lanc_os}"):
+                        if st.button("🖨️ Imprimir Comprovante / Cupom", key=f"btn_print_{id_lanc_os}"):
                             components.html(html_recibo, height=1)
                             st.info("💡 Janela de impressão enviada ao navegador.")
                             
