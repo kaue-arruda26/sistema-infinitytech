@@ -587,20 +587,22 @@ def realizar_login(usuario, senha):
     try:
         usuario_clean = usuario.strip().lower()
         user_data = executar_query("""
-            SELECT Senha, Role, Nome 
+            SELECT Senha, Role, Nome, Usuario 
             FROM Usuarios 
-            WHERE Usuario = %s
+            WHERE LOWER(TRIM(Usuario)) = %s
         """, (usuario_clean,), fetch='one')
         
-        if user_data and user_data[0] == senha:
+        if not user_data:
+            st.error(f"Usuário '{usuario.strip()}' não foi encontrado. Se você ainda não possui conta neste banco de dados, acesse a aba '📝 Criar Conta'.")
+        elif user_data[0] == senha:
             st.session_state.logged_in = True
             st.session_state.user_role = user_data[1]
             st.session_state.user_name = user_data[2]
             st.session_state.ocultar_valores = False
-            st.success("Login realizado com sucesso!")
+            st.success(f"Bem-vindo, {user_data[2]}!")
             st.rerun()
         else:
-            st.error("Usuário ou senha incorretos.")
+            st.error("Senha incorreta. Verifique a senha digitada.")
     except Exception as e:
         st.error(f"Erro de conexão com o banco: {e}")
 
@@ -702,8 +704,12 @@ if not st.session_state.logged_in:
         except Exception:
             pass
 
-        if total_usuarios > 0:
-            # Se já existem usuários, removemos a opção de cadastro público (Segurança)
+        tab_login, tab_cadastro = st.tabs(["🔒 Entrar", "📝 Criar Conta"])
+        
+        with tab_login:
+            if total_usuarios == 1:
+                st.caption("💡 *Dica:* Se este for seu primeiro acesso no banco local, use **adm** (senha: **admin**) ou cadastre sua conta na aba 'Criar Conta'.")
+            
             with st.form("form_login", clear_on_submit=False):
                 user_input = st.text_input("Usuário:", key="login_usuario")
                 pass_input = st.text_input("Senha:", type="password", key="login_senha")
@@ -716,76 +722,43 @@ if not st.session_state.logged_in:
                         realizar_login(user_input, pass_input)
                     else:
                         st.warning("Preencha o usuário e a senha.")
-        else:
-            # Caso o banco esteja totalmente vazio (primeiro acesso), permite criar o usuário ADM
-            st.info("Configuração inicial: Cadastre o Administrador do sistema.")
-            tab_login, tab_cadastro = st.tabs(["🔒 Entrar", "📝 Criar Conta"])
-            
-            with tab_login:
-                with st.form("form_login_novo", clear_on_submit=False):
-                    user_input = st.text_input("Usuário:", key="login_usuario_novo")
-                    pass_input = st.text_input("Senha:", type="password", key="login_senha_novo")
-                    
-                    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
-                    submit_btn = st.form_submit_button("Acessar Sistema", type="primary", use_container_width=True)
-                    if submit_btn:
-                        if user_input and pass_input:
-                            realizar_login(user_input, pass_input)
-                        else:
-                            st.warning("Preencha o usuário e a senha.")
                         
-            with tab_cadastro:
-                with st.form("form_cadastro", clear_on_submit=False):
-                    cad_nome = st.text_input("Nome Completo:", placeholder="Ex: Kaue Arruda", key="cad_nome")
-                    cad_usuario = st.text_input("Nome de Usuário (login):", placeholder="Ex: kaue", key="cad_usuario")
-                    cad_senha = st.text_input("Senha:", type="password", key="cad_senha")
-                    
-                    cad_role_desc = st.radio(
-                        "Tipo de Conta (Nível de Acesso):",
-                        ["Lojista (Permissão padrão para vendas/cadastro)", "Administrador (Permissão completa - Limite: 1 ADM)"],
-                        key="cad_role"
-                    )
-                    
-                    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
-                    submit_cad = st.form_submit_button("Finalizar Cadastro", type="primary", use_container_width=True)
-                    if submit_cad:
-                        if cad_nome and cad_usuario and cad_senha:
-                            cad_usuario_clean = cad_usuario.strip().lower()
-                            role_desejada = "adm" if "Administrador" in cad_role_desc else "lojista"
-                            
-                            try:
-                                if role_desejada == "adm":
-                                    qtd_adm = executar_query("SELECT COUNT(*) FROM Usuarios WHERE Role = 'adm'", fetch='one')[0]
-                                    if qtd_adm >= 1:
-                                        st.error("Erro: O sistema já possui um Administrador cadastrado. Não é permitido criar outra conta como ADM.")
-                                    else:
-                                        executar_query("""
-                                            INSERT INTO Usuarios (Usuario, Senha, Nome, Role)
-                                            VALUES (%s, %s, %s, %s)
-                                        """, (cad_usuario_clean, cad_senha, cad_nome, role_desejada))
-                                        st.session_state.logged_in = True
-                                        st.session_state.user_role = role_desejada
-                                        st.session_state.user_name = cad_nome
-                                        st.session_state.ocultar_valores = False
-                                        st.toast("Conta ADM criada com sucesso!", icon="👑")
-                                        st.rerun()
-                                else:
-                                    executar_query("""
-                                        INSERT INTO Usuarios (Usuario, Senha, Nome, Role)
-                                        VALUES (%s, %s, %s, %s)
-                                    """, (cad_usuario_clean, cad_senha, cad_nome, role_desejada))
-                                    st.session_state.logged_in = True
-                                    st.session_state.user_role = role_desejada
-                                    st.session_state.user_name = cad_nome
-                                    st.session_state.ocultar_valores = False
-                                    st.toast("Conta Lojista criada com sucesso!", icon="💼")
-                                    st.rerun()
-                            except psycopg2.IntegrityError:
-                                st.error("Erro: Este nome de usuário já está sendo utilizado.")
-                            except Exception as e:
-                                st.error(f"Erro ao cadastrar conta: {e}")
-                        else:
-                            st.warning("Preencha todos os campos obrigatórios para se cadastrar.")
+        with tab_cadastro:
+            with st.form("form_cadastro", clear_on_submit=False):
+                cad_nome = st.text_input("Nome Completo:", placeholder="Ex: Kaue Arruda", key="cad_nome")
+                cad_usuario = st.text_input("Nome de Usuário (login):", placeholder="Ex: kaue", key="cad_usuario")
+                cad_senha = st.text_input("Senha:", type="password", key="cad_senha")
+                
+                cad_role_desc = st.radio(
+                    "Tipo de Conta (Nível de Acesso):",
+                    ["Lojista (Permissão padrão para vendas/cadastro)", "Administrador (Permissão completa)"],
+                    key="cad_role"
+                )
+                
+                st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+                submit_cad = st.form_submit_button("Finalizar Cadastro", type="primary", use_container_width=True)
+                if submit_cad:
+                    if cad_nome and cad_usuario and cad_senha:
+                        cad_usuario_clean = cad_usuario.strip().lower()
+                        role_desejada = "adm" if "Administrador" in cad_role_desc else "lojista"
+                        
+                        try:
+                            executar_query("""
+                                INSERT INTO Usuarios (Usuario, Senha, Nome, Role)
+                                VALUES (%s, %s, %s, %s)
+                            """, (cad_usuario_clean, cad_senha, cad_nome, role_desejada))
+                            st.session_state.logged_in = True
+                            st.session_state.user_role = role_desejada
+                            st.session_state.user_name = cad_nome
+                            st.session_state.ocultar_valores = False
+                            st.toast(f"Conta '{cad_usuario_clean}' criada com sucesso!", icon="🎉")
+                            st.rerun()
+                        except psycopg2.IntegrityError:
+                            st.error("Erro: Este nome de usuário já está sendo utilizado.")
+                        except Exception as e:
+                            st.error(f"Erro ao cadastrar conta: {e}")
+                    else:
+                        st.warning("Preencha todos os campos obrigatórios para se cadastrar.")
                     
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
