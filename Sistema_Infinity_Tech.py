@@ -36,25 +36,311 @@ import re
 st.set_page_config(page_title="InfinityTech ERP", layout="wide", page_icon="💻")
 
 
+import sqlite3
+
 # =========================================================================
-# 1. FUNÇÃO DE CONEXÃO E AUXILIARES DE BANCO DE DADOS
+# 1. FUNÇÃO DE CONEXÃO E AUXILIARES DE BANCO DE DADOS (DUAL-ENGINE: POSTGRES / SQLITE)
 # =========================================================================
+SQLITE_DB_PATH = os.path.join(BASE_DIR, "infinitytech.db")
+
+if "db_engine" not in st.session_state:
+    st.session_state.db_engine = None  # "postgres" ou "sqlite"
+if "db_error_msg" not in st.session_state:
+    st.session_state.db_error_msg = ""
+
+def testar_conexao_postgres():
+    """Tenta conectar ao PostgreSQL / Supabase utilizando st.secrets"""
+    try:
+        if "DB_HOST" not in st.secrets:
+            return False, "Credenciais de banco não configuradas no secrets.toml."
+        conn = psycopg2.connect(
+            host=st.secrets["DB_HOST"],
+            database=st.secrets["DB_NAME"],
+            user=st.secrets["DB_USER"],
+            password=st.secrets["DB_PASSWORD"],
+            port=st.secrets["DB_PORT"],
+            connect_timeout=3
+        )
+        conn.close()
+        return True, "Conectado ao Supabase com sucesso."
+    except Exception as e:
+        return False, str(e)
+
+def inicializar_banco():
+    """Determina o mecanismo de banco de dados e assegura que as tabelas existam."""
+    if st.session_state.db_engine is None:
+        pg_ok, err = testar_conexao_postgres()
+        if pg_ok:
+            st.session_state.db_engine = "postgres"
+            st.session_state.db_error_msg = ""
+        else:
+            st.session_state.db_engine = "sqlite"
+            st.session_state.db_error_msg = err
+
+    if st.session_state.db_engine == "postgres":
+        try:
+            conn = psycopg2.connect(
+                host=st.secrets["DB_HOST"],
+                database=st.secrets["DB_NAME"],
+                user=st.secrets["DB_USER"],
+                password=st.secrets["DB_PASSWORD"],
+                port=st.secrets["DB_PORT"]
+            )
+            cursor = conn.cursor()
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Usuarios (
+                IdUsuario SERIAL PRIMARY KEY,
+                Usuario VARCHAR(100) UNIQUE NOT NULL,
+                Senha VARCHAR(255) NOT NULL,
+                Nome VARCHAR(255) NOT NULL,
+                Role VARCHAR(50) NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS Clientes (
+                IdCliente SERIAL PRIMARY KEY,
+                Nome VARCHAR(255) NOT NULL,
+                WhatsApp VARCHAR(50),
+                Email VARCHAR(255),
+                Documento VARCHAR(50),
+                CEP VARCHAR(20),
+                Logradouro VARCHAR(255),
+                Numero VARCHAR(50),
+                Complemento VARCHAR(255),
+                Bairro VARCHAR(100),
+                Cidade VARCHAR(100),
+                Estado VARCHAR(50)
+            );
+            CREATE TABLE IF NOT EXISTS Produtos (
+                IdProduto SERIAL PRIMARY KEY,
+                Marca VARCHAR(100) NOT NULL,
+                Modelo VARCHAR(100) NOT NULL,
+                CustoProduto NUMERIC(10,2) DEFAULT 0,
+                ValorMinimo NUMERIC(10,2) DEFAULT 0,
+                ValorVenda NUMERIC(10,2) DEFAULT 0,
+                Ativo BOOLEAN DEFAULT true
+            );
+            CREATE TABLE IF NOT EXISTS ItensEstoque (
+                IdItem SERIAL PRIMARY KEY,
+                IdProduto INT NOT NULL,
+                NumeroSerie VARCHAR(100),
+                Status VARCHAR(50) DEFAULT 'Disponivel',
+                FOREIGN KEY(IdProduto) REFERENCES Produtos(IdProduto)
+            );
+            CREATE TABLE IF NOT EXISTS FluxoCaixa (
+                IdLancamento SERIAL PRIMARY KEY,
+                DataLancamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                Tipo VARCHAR(10) NOT NULL,
+                Descricao TEXT,
+                Valor NUMERIC(10,2) DEFAULT 0,
+                IdCliente INT,
+                IdItem INT,
+                CustoHistorico NUMERIC(10,2) DEFAULT 0,
+                CodigoVenda VARCHAR(100)
+            );
+            CREATE TABLE IF NOT EXISTS dividas (
+                iddivida SERIAL PRIMARY KEY,
+                credor VARCHAR(255) NOT NULL,
+                descricao TEXT,
+                valor NUMERIC(10,2) DEFAULT 0,
+                data_divida DATE,
+                data_vencimento DATE,
+                id_os INT,
+                observacoes TEXT,
+                status VARCHAR(50) DEFAULT 'Pendente',
+                data_pagamento TIMESTAMP
+            );
+            """)
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            st.session_state.db_engine = "sqlite"
+            st.session_state.db_error_msg = str(e)
+
+    if st.session_state.db_engine == "sqlite":
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        cursor = conn.cursor()
+        cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS Usuarios (
+            IdUsuario INTEGER PRIMARY KEY AUTOINCREMENT,
+            Usuario TEXT UNIQUE NOT NULL,
+            Senha TEXT NOT NULL,
+            Nome TEXT NOT NULL,
+            Role TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS Clientes (
+            IdCliente INTEGER PRIMARY KEY AUTOINCREMENT,
+            Nome TEXT NOT NULL,
+            WhatsApp TEXT,
+            Email TEXT,
+            Documento TEXT,
+            CEP TEXT,
+            Logradouro TEXT,
+            Numero TEXT,
+            Complemento TEXT,
+            Bairro TEXT,
+            Cidade TEXT,
+            Estado TEXT
+        );
+        CREATE TABLE IF NOT EXISTS Produtos (
+            IdProduto INTEGER PRIMARY KEY AUTOINCREMENT,
+            Marca TEXT NOT NULL,
+            Modelo TEXT NOT NULL,
+            CustoProduto REAL DEFAULT 0,
+            ValorMinimo REAL DEFAULT 0,
+            ValorVenda REAL DEFAULT 0,
+            Ativo INTEGER DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS ItensEstoque (
+            IdItem INTEGER PRIMARY KEY AUTOINCREMENT,
+            IdProduto INTEGER NOT NULL,
+            NumeroSerie TEXT,
+            Status TEXT DEFAULT 'Disponivel',
+            FOREIGN KEY(IdProduto) REFERENCES Produtos(IdProduto)
+        );
+        CREATE TABLE IF NOT EXISTS FluxoCaixa (
+            IdLancamento INTEGER PRIMARY KEY AUTOINCREMENT,
+            DataLancamento DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Tipo TEXT NOT NULL,
+            Descricao TEXT,
+            Valor REAL DEFAULT 0,
+            IdCliente INTEGER,
+            IdItem INTEGER,
+            CustoHistorico REAL DEFAULT 0,
+            CodigoVenda TEXT
+        );
+        CREATE TABLE IF NOT EXISTS dividas (
+            iddivida INTEGER PRIMARY KEY AUTOINCREMENT,
+            credor TEXT NOT NULL,
+            descricao TEXT,
+            valor REAL DEFAULT 0,
+            data_divida TEXT,
+            data_vencimento TEXT,
+            id_os INTEGER,
+            observacoes TEXT,
+            status TEXT DEFAULT 'Pendente',
+            data_pagamento TEXT
+        );
+        """)
+        conn.commit()
+        conn.close()
+
+inicializar_banco()
+
+def traduzir_query_sqlite(query, params):
+    if params is None:
+        params = ()
+    else:
+        params = list(params)
+
+    # Trata = ANY(%s) -> IN (?, ?, ...)
+    if "= ANY(%s)" in query or "= any(%s)" in query:
+        new_params = []
+        for p in params:
+            if isinstance(p, (list, tuple, set)):
+                lst = list(p)
+                if not lst:
+                    placeholders = "NULL"
+                else:
+                    placeholders = ",".join(["?"] * len(lst))
+                    new_params.extend(lst)
+                query = re.sub(r'=\s*(?:ANY|any)\(%s\)', f'IN ({placeholders})', query, count=1)
+            else:
+                new_params.append(p)
+                query = query.replace("%s", "?", 1)
+        params = new_params
+
+    # Substitui %s restantes por ?
+    query = query.replace("%s", "?")
+    
+    # Literais Booleanos
+    query = query.replace("p.Ativo = true", "p.Ativo = 1")
+    query = query.replace("p.Ativo = false", "p.Ativo = 0")
+    query = query.replace("p.Ativo = TRUE", "p.Ativo = 1")
+    query = query.replace("p.Ativo = FALSE", "p.Ativo = 0")
+    query = query.replace("Ativo = true", "Ativo = 1")
+    query = query.replace("Ativo = false", "Ativo = 0")
+
+    # Funções de data
+    query = query.replace("CURRENT_DATE - INTERVAL '30 days'", "date('now', '-30 days')")
+    query = query.replace("CURRENT_DATE", "date('now')")
+    query = re.sub(r'CAST\s*\(\s*DataLancamento\s+AS\s+DATE\s*\)', "date(DataLancamento)", query, flags=re.IGNORECASE)
+    query = re.sub(r'CAST\s*\(\s*data_pagamento\s+AS\s+DATE\s*\)', "date(data_pagamento)", query, flags=re.IGNORECASE)
+
+    # Escapar porcentagem do psycopg2
+    query = query.replace("%%", "%")
+
+    return query, tuple(params)
+
+class SQLiteCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self.last_returning_id = None
+
+    def execute(self, query, params=None):
+        if params is None:
+            params = ()
+        else:
+            params = list(params)
+
+        match_returning = re.search(r'\s+RETURNING\s+([a-zA-Z0-9_]+)', query, flags=re.IGNORECASE)
+        has_returning = bool(match_returning)
+        if has_returning:
+            query = re.sub(r'\s+RETURNING\s+([a-zA-Z0-9_]+)', '', query, flags=re.IGNORECASE)
+
+        q_trans, p_trans = traduzir_query_sqlite(query, params)
+        res = self.cursor.execute(q_trans, p_trans)
+        if has_returning:
+            self.last_returning_id = self.cursor.lastrowid
+        else:
+            self.last_returning_id = None
+        return res
+
+    def fetchone(self):
+        if self.last_returning_id is not None:
+            val = self.last_returning_id
+            self.last_returning_id = None
+            return (val,)
+        return self.cursor.fetchone()
+
+    def fetchall(self):
+        return self.cursor.fetchall()
+
+    def close(self):
+        return self.cursor.close()
+
+class SQLiteConnWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def cursor(self):
+        return SQLiteCursorWrapper(self.conn.cursor())
+
+    def commit(self):
+        return self.conn.commit()
+
+    def rollback(self):
+        return self.conn.rollback()
+
+    def close(self):
+        return self.conn.close()
+
 def abrir_conexao():
-    """
-    Conecta ao banco de dados PostgreSQL do Supabase utilizando as 
-    credenciais armazenadas no st.secrets.
-    """
-    return psycopg2.connect(
-        host=st.secrets["DB_HOST"],
-        database=st.secrets["DB_NAME"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        port=st.secrets["DB_PORT"]
-    )
+    """Retorna uma conexão (PostgreSQL ou SQLite Wrapper)."""
+    if st.session_state.get("db_engine") == "postgres":
+        return psycopg2.connect(
+            host=st.secrets["DB_HOST"],
+            database=st.secrets["DB_NAME"],
+            user=st.secrets["DB_USER"],
+            password=st.secrets["DB_PASSWORD"],
+            port=st.secrets["DB_PORT"]
+        )
+    else:
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        return SQLiteConnWrapper(conn)
 
 def executar_query(query, params=None, fetch=None):
     """
-    Executa uma query no banco de dados com tratamento de conexões automático.
+    Executa uma query no banco de dados com tratamento automático de exceções e compatibilidade.
     fetch: None, 'one', 'all'
     """
     conn = abrir_conexao()
@@ -69,6 +355,8 @@ def executar_query(query, params=None, fetch=None):
         conn.commit()
     except Exception as e:
         conn.rollback()
+        if isinstance(e, sqlite3.IntegrityError):
+            raise psycopg2.IntegrityError(str(e))
         raise e
     finally:
         cursor.close()
@@ -528,6 +816,18 @@ with st.sidebar:
     opcao = st.radio("Navegação do Sistema:", opcoes_menu)
     
     st.write("---")
+    # Indicador e Configuração do Banco de Dados
+    if st.session_state.get("db_engine") == "postgres":
+        st.success("🟢 Conectado ao Supabase (Nuvem)")
+    else:
+        st.warning("🟡 Banco de Dados Local (SQLite)")
+        if st.session_state.get("db_error_msg"):
+            with st.expander("ℹ️ Status da Conexão Nuvem"):
+                st.caption(f"Supabase offline/pausado: {st.session_state.db_error_msg[:120]}...")
+                if st.button("🔄 Reconectar Supabase", use_container_width=True):
+                    st.session_state.db_engine = None
+                    st.rerun()
+
     st.caption(f"Usuário: {st.session_state.user_name}")
     
     # Botão para ocultar/mostrar valores financeiros
