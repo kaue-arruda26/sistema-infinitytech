@@ -232,6 +232,9 @@ def traduzir_query_sqlite(query, params):
     else:
         params = list(params)
 
+    # Substitui ILIKE por LIKE (compatibilidade SQLite)
+    query = re.sub(r'\bILIKE\b', 'LIKE', query, flags=re.IGNORECASE)
+
     # Trata = ANY(%s) -> IN (?, ?, ...)
     if "= ANY(%s)" in query or "= any(%s)" in query:
         new_params = []
