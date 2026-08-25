@@ -14,11 +14,32 @@ LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 def converter_para_sp(dt):
     if dt is None:
         return None
-    if dt.tzinfo is not None:
-        dt_sp = dt.astimezone(timezone(timedelta(hours=-3)))
-    else:
-        dt_sp = dt.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=-3)))
-    return dt_sp.replace(tzinfo=None)
+    if isinstance(dt, str):
+        dt_str = dt.strip()
+        if not dt_str:
+            return None
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        except Exception:
+            parsed = False
+            for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    dt = datetime.strptime(dt_str, fmt)
+                    parsed = True
+                    break
+                except Exception:
+                    pass
+            if not parsed:
+                return None
+    if isinstance(dt, datetime):
+        if dt.tzinfo is not None:
+            dt_sp = dt.astimezone(timezone(timedelta(hours=-3)))
+        else:
+            dt_sp = dt.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=-3)))
+        return dt_sp.replace(tzinfo=None)
+    elif hasattr(dt, 'year') and hasattr(dt, 'month') and hasattr(dt, 'day'):
+        return datetime(dt.year, dt.month, dt.day)
+    return None
 
 def obter_agora_sp():
     return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3))).replace(tzinfo=None)
